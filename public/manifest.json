@@ -1,5 +1,5 @@
 {
-  "id": "/",
+  "id": "com.basmahtech.pwa",
   "short_name": "بصمة تك",
   "name": "نظام بصمة تك لإدارة البصمات والحضور",
   "description": "نظام بصمة تك السحابي المتقدم لإدارة الحضور والانصراف والورديات وأجهزة البصمة",
@@ -29,12 +29,42 @@
       "purpose": "maskable"
     }
   ],
-  "start_url": "/",
+  "screenshots": [
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "شاشة نظام بصمة تك للكمبيوتر والشاشات الكبيرة"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "شاشة تطبيق بصمة تك للهواتف الذكية"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "سحب البصمات",
+      "short_name": "البصمات",
+      "description": "سحب حركات الحضور والبصمات مباشرة",
+      "url": "/?source=pwa_shortcut",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "start_url": "/?source=pwa",
   "scope": "/",
   "background_color": "#020617",
   "theme_color": "#020617",
   "display": "standalone",
-  "display_override": ["standalone", "fullscreen", "minimal-ui"],
+  "display_override": ["standalone", "window-controls-overlay", "minimal-ui"],
   "orientation": "any",
   "categories": ["business", "utilities", "productivity"],
   "prefer_related_applications": false,

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import BrandLogo from './BrandLogo';
 import BiometricKioskShowcase from './BiometricKioskShowcase';
+import PWAInstallPrompt from './PWAInstallPrompt';
 
 interface AuthUIProps {
   onSuccess: (user: any) => void;
@@ -272,6 +273,11 @@ export default function AuthUI({ onSuccess }: AuthUIProps) {
 
   return (
     <div id="auth-ui" className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center p-4 lg:p-8 relative overflow-y-auto pt-24 sm:pt-28 pb-16">
+      {/* PWA App Install Banner */}
+      <div className="fixed top-0 left-0 right-0 z-50">
+        <PWAInstallPrompt />
+      </div>
+
       {/* Dynamic Background Design */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />

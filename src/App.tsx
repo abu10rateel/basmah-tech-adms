@@ -12,6 +12,7 @@ import ShiftManager from './components/ShiftManager';
 import AttendanceRegister from './components/AttendanceRegister';
 import ReportingEngine from './components/ReportingEngine';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { db } from './supabaseClient';
 import { LogOut, UserCheck, Users, Clock, BarChart3, Database, Building2, Calendar, AlertTriangle, ShieldAlert, AlertCircle, MessageSquare, ExternalLink } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
@@ -142,6 +143,9 @@ export default function App() {
   return (
     <div id="main-layout" className="h-full h-[100dvh] w-full bg-slate-950 text-slate-100 flex flex-col font-sans overflow-hidden selection:bg-emerald-500 selection:text-slate-950">
       
+      {/* PWA App Install Banner */}
+      <PWAInstallPrompt />
+
       {/* Top Professional Header (Operational Business View) */}
       <header className="bg-slate-900 border-b border-slate-800 shrink-0 px-3 sm:px-6 py-2.5 sm:py-3.5 print:hidden z-30">
         <div className="w-full max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2.5 sm:gap-4">
