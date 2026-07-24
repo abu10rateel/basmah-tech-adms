@@ -580,11 +580,18 @@ export const db = {
     }
   },
 
-  async getZkRawLogs(): Promise<any[]> {
+  async getZkRawLogs(params?: { fromDate?: string; toDate?: string }): Promise<any[]> {
     const user = await this.getCurrentUser();
     if (!user) return [];
     try {
-      const response = await fetch('/api/devices/raw-logs', {
+      let url = '/api/devices/raw-logs';
+      if (params?.fromDate || params?.toDate) {
+        const queryParams = new URLSearchParams();
+        if (params.fromDate) queryParams.append('fromDate', params.fromDate);
+        if (params.toDate) queryParams.append('toDate', params.toDate);
+        url += `?${queryParams.toString()}`;
+      }
+      const response = await fetch(url, {
         headers: { 'x-user-id': user.id }
       });
       const parsed = await safeFetchJson<any[]>(response);

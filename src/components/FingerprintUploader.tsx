@@ -28,6 +28,30 @@ const ARABIC_MONTHS = [
   { value: 12, label: 'ديسمبر (12)' }
 ];
 
+const getTodayStr = () => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getFirstDayOfMonthStr = () => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${yyyy}-${mm}-01`;
+};
+
+const getLast7DaysStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 6);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 interface FingerprintUploaderProps {
   employees: Employee[];
   shifts: ShiftSchedule[];
@@ -93,6 +117,11 @@ export default function FingerprintUploader({
   const [loadingShortUrl, setLoadingShortUrl] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<'bsma' | 'cloud' | null>(null);
 
+  // --- DATE RANGE FOR CLOUD LOGS ---
+  const [fromDate, setFromDate] = useState<string>(getFirstDayOfMonthStr());
+  const [toDate, setToDate] = useState<string>(getTodayStr());
+  const [fetchingCloudLogs, setFetchingCloudLogs] = useState<boolean>(false);
+
   const fetchShortUrl = async () => {
     setLoadingShortUrl(true);
     try {
@@ -103,16 +132,16 @@ export default function FingerprintUploader({
         if (data && data.shortUrl) {
           let url = data.shortUrl;
           if (url.includes('localhost') || url.includes('127.0.0.1')) {
-            url = 'https://basmah-tk.ai.studio/adms';
+            url = 'https://basmah-tech.onrender.com/adms';
           }
           setShortUrl(url);
           return;
         }
       }
-      setShortUrl('https://basmah-tk.ai.studio/adms');
+      setShortUrl('https://basmah-tech.onrender.com/adms');
     } catch (err) {
       console.error('Error fetching short URL:', err);
-      setShortUrl('https://basmah-tk.ai.studio/adms');
+      setShortUrl('https://basmah-tech.onrender.com/adms');
     } finally {
       setLoadingShortUrl(false);
     }
@@ -136,13 +165,15 @@ export default function FingerprintUploader({
     };
   }, [isOpen, activeTab]);
 
-  const loadZkData = async () => {
+  const loadZkData = async (overrideFrom?: string, overrideTo?: string) => {
     setLoadingZk(true);
     try {
+      const fDate = overrideFrom ?? fromDate;
+      const tDate = overrideTo ?? toDate;
       // @ts-ignore
       const [devList, logList] = await Promise.all([
         db.getDevices(),
-        db.getZkRawLogs()
+        db.getZkRawLogs({ fromDate: fDate, toDate: tDate })
       ]);
       setDevices(devList || []);
       setZkRawLogs(logList || []);
@@ -151,6 +182,49 @@ export default function FingerprintUploader({
     } finally {
       setLoadingZk(false);
     }
+  };
+
+  const fetchCloudLogs = async (overrideFrom?: string, overrideTo?: string) => {
+    const fDate = overrideFrom ?? fromDate;
+    const tDate = overrideTo ?? toDate;
+    setFetchingCloudLogs(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      // @ts-ignore
+      const logList = await db.getZkRawLogs({ fromDate: fDate, toDate: tDate });
+      setZkRawLogs(logList || []);
+      setSuccess(`تم سحب ${logList?.length || 0} بصمة من السحابة للفترة من ${fDate} إلى ${tDate}`);
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (err) {
+      console.error('Error fetching cloud logs:', err);
+      setError('حدث خطأ أثناء سحب البصمات من السحابة.');
+    } finally {
+      setFetchingCloudLogs(false);
+    }
+  };
+
+  const handlePresetToday = () => {
+    const today = getTodayStr();
+    setFromDate(today);
+    setToDate(today);
+    fetchCloudLogs(today, today);
+  };
+
+  const handlePresetLast7Days = () => {
+    const last7 = getLast7DaysStr();
+    const today = getTodayStr();
+    setFromDate(last7);
+    setToDate(today);
+    fetchCloudLogs(last7, today);
+  };
+
+  const handlePresetCurrentMonth = () => {
+    const firstDay = getFirstDayOfMonthStr();
+    const today = getTodayStr();
+    setFromDate(firstDay);
+    setToDate(today);
+    fetchCloudLogs(firstDay, today);
   };
 
   useEffect(() => {
@@ -1400,6 +1474,87 @@ export default function FingerprintUploader({
                   {/* SECTION 2: RAW LOGS SYNC QUEUE */}
                   {zkSection === 'logs' && (
                     <div className="space-y-4 text-right">
+                      {/* DATE RANGE & CLOUD FETCH CONTROLS */}
+                      <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-xl space-y-3 text-right shadow-sm">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-100">
+                            <Calendar className="w-4 h-4 text-emerald-400" />
+                            <span>تحديد نطاق التاريخ لسحب البصمات من السحابة</span>
+                          </div>
+                          {/* Quick Presets */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] text-slate-400 font-sans ml-1">خيارات سريعة:</span>
+                            <button
+                              type="button"
+                              onClick={handlePresetToday}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition cursor-pointer font-sans"
+                            >
+                              اليوم
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handlePresetLast7Days}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition cursor-pointer font-sans"
+                            >
+                              آخر 7 أيام
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handlePresetCurrentMonth}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition cursor-pointer font-sans"
+                            >
+                              الشهر الحالي
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pt-1">
+                          {/* From Date */}
+                          <div className="space-y-1 text-right">
+                            <label className="text-[10px] text-slate-400 block font-sans">من تاريخ (From Date):</label>
+                            <input
+                              type="date"
+                              value={fromDate}
+                              onChange={(e) => setFromDate(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
+                            />
+                          </div>
+
+                          {/* To Date */}
+                          <div className="space-y-1 text-right">
+                            <label className="text-[10px] text-slate-400 block font-sans">إلى تاريخ (To Date):</label>
+                            <input
+                              type="date"
+                              value={toDate}
+                              onChange={(e) => setToDate(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
+                            />
+                          </div>
+
+                          {/* Fetch Cloud Logs Button */}
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => fetchCloudLogs()}
+                              disabled={fetchingCloudLogs || loadingZk}
+                              className="w-full py-2 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 text-slate-950 disabled:text-slate-500 font-extrabold rounded-lg text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow shadow-emerald-500/10 font-sans"
+                            >
+                              {fetchingCloudLogs ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  <span>جاري السحب...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                  <span>سحب البصمات من السحابة</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="bg-slate-950/60 border border-slate-850 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <div className="space-y-1 text-right">
                           <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5 justify-end">
@@ -1424,7 +1579,7 @@ export default function FingerprintUploader({
                           ) : (
                             <>
                               <Wifi className="w-4 h-4 animate-pulse" />
-                              <span>سحب ومزامنة البصمات أونلاين ({zkRawLogs.length})</span>
+                              <span>ترحيل البصمات لجدول الحضور ({zkRawLogs.length})</span>
                             </>
                           )}
                         </button>
@@ -1544,10 +1699,10 @@ export default function FingerprintUploader({
                                 </div>
 
                                 <div className="space-y-3">
-                                  {/* Official Server Address */}
+                                  {/* Official Render Server Address */}
                                   <div className="space-y-1 text-right">
                                     <div className="text-[10px] text-slate-400 font-sans flex items-center justify-between">
-                                      <span>1. عنوان خادم السحاب (Server Address):</span>
+                                      <span>1. عنوان خادم السحاب المباشر (Server Address على Render):</span>
                                       {copiedLink === 'official' && (
                                         <span className="text-emerald-400 font-bold text-[9px] animate-pulse">تم النسخ بنجاح!</span>
                                       )}
@@ -1555,13 +1710,13 @@ export default function FingerprintUploader({
                                     <div className="flex items-center justify-between gap-3 bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
                                       <div className="text-right flex-1 min-w-0">
                                         <span className="text-xs font-bold tracking-wider text-emerald-300 select-all font-mono">
-                                          basmah-tk.ai.studio/adms
+                                          basmah-tech.onrender.com/adms
                                         </span>
                                       </div>
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          navigator.clipboard.writeText('basmah-tk.ai.studio/adms');
+                                          navigator.clipboard.writeText('basmah-tech.onrender.com/adms');
                                           setCopiedLink('official');
                                           setTimeout(() => setCopiedLink(null), 2000);
                                         }}
