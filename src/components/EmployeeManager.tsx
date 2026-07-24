@@ -27,6 +27,14 @@ export default function EmployeeManager() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Sync global editing state so background refresh pauses when form is open
+  useEffect(() => {
+    (window as any).__IS_USER_EDITING__ = showForm;
+    return () => {
+      (window as any).__IS_USER_EDITING__ = false;
+    };
+  }, [showForm]);
+
   const loadData = async () => {
     setLoading(true);
     const [empData, shiftData] = await Promise.all([
@@ -36,7 +44,7 @@ export default function EmployeeManager() {
     setEmployees(empData);
     setShifts(shiftData);
     
-    // Set default shift selection if any exists
+    // Set default shift selection only if adding new and not yet selected
     if (shiftData.length > 0 && !shiftScheduleId) {
       setShiftScheduleId(shiftData[0].id);
     }

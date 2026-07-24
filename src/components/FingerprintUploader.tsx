@@ -148,6 +148,17 @@ export default function FingerprintUploader({
   };
 
   useEffect(() => {
+    if (isOpen) {
+      (window as any).__IS_USER_EDITING__ = true;
+    } else {
+      (window as any).__IS_USER_EDITING__ = false;
+    }
+    return () => {
+      (window as any).__IS_USER_EDITING__ = false;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
     if (isOpen && activeTab === 'online' && !shortUrl) {
       fetchShortUrl();
     }
@@ -556,7 +567,7 @@ export default function FingerprintUploader({
           const checkin_start = schedule.checkin_start || addMinutesToTimeStr(shift_in, -120);
           const checkin_end = schedule.checkin_end || addMinutesToTimeStr(shift_in, 180);
           
-          const checkout_start = schedule.checkout_start || addMinutesToTimeStr(shift_out, -120);
+          const checkout_start = schedule.checkout_start || checkin_end;
           const checkout_end = schedule.checkout_end || addMinutesToTimeStr(shift_out, 240);
 
           const isDual = matchedEmp.is_dual_shift && schedule.type === 'dual';
@@ -565,12 +576,12 @@ export default function FingerprintUploader({
             // Dual shift processing
             const s1_checkin_start_min = timeToMinutes(addMinutesToTimeStr(schedule.shift1_start, -120));
             const s1_checkin_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift1_start, 120));
-            const s1_checkout_start_min = timeToMinutes(addMinutesToTimeStr(schedule.shift1_end, -120));
-            const s1_checkout_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift1_end, 120));
+            const s1_checkout_start_min = s1_checkin_end_min;
+            const s1_checkout_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift1_end, 180));
 
             const s2_checkin_start_min = timeToMinutes(addMinutesToTimeStr(schedule.shift2_start, -120));
             const s2_checkin_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift2_start, 120));
-            const s2_checkout_start_min = timeToMinutes(addMinutesToTimeStr(schedule.shift2_end, -120));
+            const s2_checkout_start_min = s2_checkin_end_min;
             const s2_checkout_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift2_end, 180));
 
             const s1_checkins: number[] = [];
@@ -592,60 +603,35 @@ export default function FingerprintUploader({
             if (s2_checkouts.length > 0) shift2_check_out = addMinutesToTimeStr('00:00', Math.max(...s2_checkouts));
           } else {
             // Single & Overnight shift processing
-            const checkInCandidates: { time: string; min: number }[] = [];
-            const checkOutCandidates: { time: string; min: number }[] = [];
+            const shiftInMin = timeToMinutes(shift_in);
+            let shiftOutMin = timeToMinutes(shift_out);
+            if (shiftOutMin <= shiftInMin) shiftOutMin += 1440;
 
-            const baseParts = date.split('-').map(Number);
-            const baseDate = new Date(baseParts[0], baseParts[1] - 1, baseParts[2], 0, 0, 0);
-
-            const checkin_start_min = timeToMinutes(checkin_start);
-            
-            const adjustTime = (min: number) => {
-              return min < checkin_start_min ? min + 1440 : min;
+            const getRelMin = (tStr: string) => {
+              let m = timeToMinutes(tStr);
+              if (shiftOutMin > 1440 && m < shiftInMin - 360) {
+                m += 1440;
+              }
+              return m;
             };
 
-            const checkin_end_min = adjustTime(timeToMinutes(checkin_end));
-            const checkout_start_min = adjustTime(timeToMinutes(checkout_start));
-            const checkout_end_min = adjustTime(timeToMinutes(checkout_end));
+            const timelineSorted = [...uniqueTimes].sort((a, b) => getRelMin(a) - getRelMin(b));
 
-            sortedItems.forEach((item) => {
-              const punchParts = item.punch.date.split('-').map(Number);
-              const punchDate = new Date(punchParts[0], punchParts[1] - 1, punchParts[2], 0, 0, 0);
-              const diffDays = Math.round((punchDate.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
-              const relMin = diffDays * 1440 + timeToMinutes(item.punch.time);
+            if (timelineSorted.length === 1) {
+              const relM = getRelMin(timelineSorted[0]);
+              const distToIn = Math.abs(relM - shiftInMin);
+              const distToOut = Math.abs(relM - shiftOutMin);
 
-              if (relMin >= checkin_start_min && relMin <= checkin_end_min) {
-                checkInCandidates.push({ time: item.punch.time, min: relMin });
-              } else if (relMin >= checkout_start_min && relMin <= checkout_end_min) {
-                checkOutCandidates.push({ time: item.punch.time, min: relMin });
+              if (distToIn <= distToOut) {
+                shift1_check_in = timelineSorted[0];
+                shift1_check_out = null;
+              } else {
+                shift1_check_in = null;
+                shift1_check_out = timelineSorted[0];
               }
-            });
-
-            if (checkInCandidates.length > 0) {
-              checkInCandidates.sort((a, b) => a.min - b.min);
-              shift1_check_in = checkInCandidates[0].time; // First punch
-            }
-            if (checkOutCandidates.length > 0) {
-              checkOutCandidates.sort((a, b) => a.min - b.min);
-              shift1_check_out = checkOutCandidates[checkOutCandidates.length - 1].time; // Last punch
-            }
-
-            // Smart Fallback for pairing punches if 2+ punches exist
-            if (!shift1_check_in && !shift1_check_out && uniqueTimes.length > 0) {
-              shift1_check_in = uniqueTimes[0];
-              if (uniqueTimes.length > 1) {
-                shift1_check_out = uniqueTimes[uniqueTimes.length - 1];
-              }
-            } else if (shift1_check_in && !shift1_check_out && uniqueTimes.length > 1) {
-              const lastPunchTime = sortedItems[sortedItems.length - 1].punch.time;
-              if (lastPunchTime !== shift1_check_in) {
-                shift1_check_out = lastPunchTime;
-              }
-            } else if (!shift1_check_in && shift1_check_out && uniqueTimes.length > 1) {
-              const firstPunchTime = sortedItems[0].punch.time;
-              if (firstPunchTime !== shift1_check_out) {
-                shift1_check_in = firstPunchTime;
-              }
+            } else if (timelineSorted.length >= 2) {
+              shift1_check_in = timelineSorted[0];
+              shift1_check_out = timelineSorted[timelineSorted.length - 1];
             }
           }
         }

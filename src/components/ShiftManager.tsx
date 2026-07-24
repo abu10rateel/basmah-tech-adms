@@ -85,6 +85,14 @@ export default function ShiftManager() {
 
 
 
+  // Sync global editing state so background refresh pauses when shift form is open
+  useEffect(() => {
+    (window as any).__IS_USER_EDITING__ = showForm;
+    return () => {
+      (window as any).__IS_USER_EDITING__ = false;
+    };
+  }, [showForm]);
+
   // Fetch shifts
   const fetchShifts = async () => {
     setLoading(true);

@@ -427,19 +427,39 @@ export const db = {
 
   // Real-time listener: combines local storage sync triggers and database-level refresh triggers
   subscribeToChanges(table: string, callback: () => void) {
+    const isUserEditing = (): boolean => {
+      if (typeof document === 'undefined') return false;
+      if ((window as any).__IS_USER_EDITING__) return true;
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName ? active.tagName.toUpperCase() : '';
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) {
+          return true;
+        }
+        if (active.getAttribute && active.getAttribute('contenteditable') === 'true') {
+          return true;
+        }
+      }
+      return false;
+    };
+
     const localListener = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail && detail.table === table) {
-        callback();
+        if (!isUserEditing()) {
+          callback();
+        }
       }
     };
 
     window.addEventListener('cloud_db_update', localListener);
 
-    // Dynamic Server Polling Interval to simulate real-time database listener (Active fallback)
+    // Dynamic Server Polling Interval: automatically pauses while user is typing or filling a form
     const pollInterval = setInterval(() => {
-      callback();
-    }, 7000);
+      if (!isUserEditing()) {
+        callback();
+      }
+    }, 15000);
 
     return () => {
       window.removeEventListener('cloud_db_update', localListener);

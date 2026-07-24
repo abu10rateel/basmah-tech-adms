@@ -43,25 +43,31 @@ export default function AttendanceRegister() {
       setShifts(shiftData);
       setLogs(logData);
 
-      // Pre-initialize inline log edits map with existing records or empty slots
-      const editsMap: Record<string, Partial<AttendanceLog>> = {};
-      empData.forEach((emp) => {
-        const existingLog = logData.find((l) => l.employee_id === emp.id);
-        if (existingLog) {
-          editsMap[emp.id] = { ...existingLog };
-        } else {
-          editsMap[emp.id] = {
-            employee_id: emp.id,
-            date: selectedDate,
-            shift1_check_in: '',
-            shift1_check_out: '',
-            shift2_check_in: '',
-            shift2_check_out: '',
-            notes: ''
-          };
-        }
+      // Merge new data while preserving user's active unsaved local inputs
+      setLogEdits(prevEdits => {
+        const editsMap: Record<string, Partial<AttendanceLog> & { _isDirty?: boolean }> = {};
+        empData.forEach((emp) => {
+          const existingLog = logData.find((l) => l.employee_id === emp.id);
+          const prev = prevEdits[emp.id];
+          if (prev && prev._isDirty) {
+            // User is currently editing this row, preserve their unsaved typing!
+            editsMap[emp.id] = prev;
+          } else if (existingLog) {
+            editsMap[emp.id] = { ...existingLog };
+          } else {
+            editsMap[emp.id] = {
+              employee_id: emp.id,
+              date: selectedDate,
+              shift1_check_in: '',
+              shift1_check_out: '',
+              shift2_check_in: '',
+              shift2_check_out: '',
+              notes: ''
+            };
+          }
+        });
+        return editsMap;
       });
-      setLogEdits(editsMap);
     } catch (err: any) {
       setError('تعذر تحميل سجلات الحضور لليوم.');
     } finally {
@@ -84,11 +90,13 @@ export default function AttendanceRegister() {
 
   // Handle value change for an employee's daily log
   const handleTimeChange = (empId: string, field: keyof AttendanceLog, value: string) => {
+    (window as any).__IS_USER_EDITING__ = true;
     setLogEdits(prev => ({
       ...prev,
       [empId]: {
         ...prev[empId],
-        [field]: value || null
+        [field]: value || null,
+        _isDirty: true
       }
     }));
   };
@@ -164,6 +172,14 @@ export default function AttendanceRegister() {
       setError('فشل في حفظ سجل البصمة.');
     } else {
       setSuccess('تم حفظ بصمة اليوم بنجاح للموظف.');
+      (window as any).__IS_USER_EDITING__ = false;
+      setLogEdits(prev => ({
+        ...prev,
+        [empId]: {
+          ...prev[empId],
+          _isDirty: false
+        }
+      }));
       loadData();
       setTimeout(() => setSuccess(null), 3000);
     }
@@ -434,7 +450,7 @@ export default function AttendanceRegister() {
 
                   {/* Realtime Calc Result Preview */}
                   {calcResult && (calcResult.has_shift1 || calcResult.has_shift2) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-3 border-t border-slate-900 text-center">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-slate-900 text-center">
                       <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-900">
                         <span className="block text-[9px] text-slate-500">ساعات العمل الفعلية</span>
                         <span className="text-xs font-bold text-slate-200">
@@ -443,7 +459,7 @@ export default function AttendanceRegister() {
                       </div>
 
                       <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-900">
-                        <span className="block text-[9px] text-slate-500">مجموع دقائق التأخير</span>
+                        <span className="block text-[9px] text-slate-500">دقائق التأخير</span>
                         <span className={`text-xs font-bold ${
                           calcResult.total_late > 0 ? 'text-amber-400' : 'text-slate-400'
                         }`}>
@@ -455,7 +471,19 @@ export default function AttendanceRegister() {
                       </div>
 
                       <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-900">
-                        <span className="block text-[9px] text-slate-500">الوقت الإضافي المحتسب</span>
+                        <span className="block text-[9px] text-slate-500">الخروج المبكر</span>
+                        <span className={`text-xs font-bold ${
+                          calcResult.total_early_departure > 0 ? 'text-rose-400' : 'text-slate-400'
+                        }`}>
+                          {calcResult.total_early_departure > 0 
+                            ? formatMinutesArabic(calcResult.total_early_departure) 
+                            : 'لا يوجد خروج مبكر'
+                          }
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-900">
+                        <span className="block text-[9px] text-slate-500">الوقت الإضافي</span>
                         <span className={`text-xs font-bold ${
                           calcResult.total_ot > 0 ? 'text-emerald-400' : 'text-slate-400'
                         }`}>

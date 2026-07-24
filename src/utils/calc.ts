@@ -104,38 +104,74 @@ export function calculateSingleShiftMetrics(
   schedEndStr: string,
   actualStartStr: string | null,
   actualEndStr: string | null,
-  graceMinutes: number,
-  overtimeThresholdMinutes: number
+  graceMinutes?: number,
+  overtimeThresholdMinutes?: number
 ): { hours: number; late: number; ot: number; early: number } {
   if (!actualStartStr && !actualEndStr) {
     return { hours: 0, late: 0, ot: 0, early: 0 };
   }
 
-  const schedStart = timeToMinutes(schedStartStr);
-  let schedEnd = timeToMinutes(schedEndStr);
+  // Safe parsing of graceMinutes and overtimeThresholdMinutes with default fallbacks
+  const grace = typeof graceMinutes === 'number' && !isNaN(graceMinutes) ? graceMinutes : 15;
+  const otThreshold = typeof overtimeThresholdMinutes === 'number' && !isNaN(overtimeThresholdMinutes) ? overtimeThresholdMinutes : 30;
+
+  const schedStart = timeToMinutes(schedStartStr || '08:00');
+  let schedEnd = timeToMinutes(schedEndStr || '16:00');
   if (schedEnd <= schedStart) {
-    // Midnight cross in schedule (e.g. 22:00 to 06:00, or 18:00 to 02:00)
+    // Midnight cross in schedule (e.g. 22:00 to 06:00, or 18:00 to 02:00 or 15:00 to 03:00)
     schedEnd += 1440;
   }
   const schedDuration = schedEnd - schedStart;
 
+  // Helper to get relative minute along continuous shift timeline
+  const getRelativeMin = (tStr: string) => {
+    let m = timeToMinutes(tStr);
+    if (schedEnd > 1440 && m < schedStart - 360) {
+      m += 1440;
+    }
+    return m;
+  };
+
+  // Auto-normalize & sanitize actual check-in and check-out times if swapped or misassigned
+  let normStartStr = actualStartStr;
+  let normEndStr = actualEndStr;
+
+  if (normStartStr && normEndStr) {
+    const mStart = getRelativeMin(normStartStr);
+    const mEnd = getRelativeMin(normEndStr);
+    // If check-in relative time is later than check-out relative time, they were inverted!
+    if (mStart > mEnd) {
+      normStartStr = actualEndStr;
+      normEndStr = actualStartStr;
+    }
+  } else if (normStartStr && !normEndStr) {
+    const mStart = getRelativeMin(normStartStr);
+    const distToStart = Math.abs(mStart - schedStart);
+    const distToEnd = Math.abs(mStart - schedEnd);
+    if (distToEnd < distToStart) {
+      normEndStr = normStartStr;
+      normStartStr = null;
+    }
+  } else if (!normStartStr && normEndStr) {
+    const mEnd = getRelativeMin(normEndStr);
+    const distToStart = Math.abs(mEnd - schedStart);
+    const distToEnd = Math.abs(mEnd - schedEnd);
+    if (distToStart < distToEnd) {
+      normStartStr = normEndStr;
+      normEndStr = null;
+    }
+  }
+
   let actStart: number | null = null;
   let actEnd: number | null = null;
 
-  if (actualStartStr) {
-    let min = timeToMinutes(actualStartStr);
-    // If night shift (schedEnd > 1440) and actual check-in occurs after midnight (e.g. 00:30 for a 22:00 shift)
-    if (schedEnd > 1440 && min < schedStart - 360) {
-      min += 1440;
-    }
-    actStart = min;
+  if (normStartStr) {
+    actStart = getRelativeMin(normStartStr);
   }
 
-  if (actualEndStr) {
-    let min = timeToMinutes(actualEndStr);
+  if (normEndStr) {
+    let min = getRelativeMin(normEndStr);
     if (actStart !== null && min < actStart) {
-      min += 1440;
-    } else if (actStart === null && schedEnd > 1440 && min < schedStart - 360) {
       min += 1440;
     }
     actEnd = min;
@@ -144,7 +180,7 @@ export function calculateSingleShiftMetrics(
   // 1. Lateness (التأخير)
   let lateMinutes = 0;
   if (actStart !== null) {
-    if (actStart > schedStart + graceMinutes) {
+    if (actStart > schedStart + grace) {
       lateMinutes = actStart - schedStart;
     }
   }
@@ -159,20 +195,35 @@ export function calculateSingleShiftMetrics(
 
   // 3. Working hours & Overtime
   let hoursWorked = 0;
-  let otHours = 0;
+  let otMinutes = 0;
+
   if (actStart !== null && actEnd !== null && actEnd > actStart) {
     const actDuration = actEnd - actStart;
     hoursWorked = actDuration / 60;
-    if (actDuration > schedDuration + overtimeThresholdMinutes) {
-      otHours = (actDuration - schedDuration) / 60;
+
+    // Overtime calculation:
+    // Option A: Overtime from staying past shift end
+    if (actEnd > schedEnd) {
+      const extraEndMins = actEnd - schedEnd;
+      if (extraEndMins >= otThreshold) {
+        otMinutes = Math.max(otMinutes, extraEndMins);
+      }
+    }
+
+    // Option B: Overtime from total time worked exceeding scheduled shift duration
+    if (actDuration > schedDuration) {
+      const extraDurationMins = actDuration - schedDuration;
+      if (extraDurationMins >= otThreshold) {
+        otMinutes = Math.max(otMinutes, extraDurationMins);
+      }
     }
   }
 
   return {
-    hours: Math.max(0, hoursWorked),
-    late: Math.max(0, lateMinutes),
-    ot: Math.max(0, otHours),
-    early: Math.max(0, earlyDepartureMinutes),
+    hours: Math.max(0, Number(hoursWorked.toFixed(2))),
+    late: Math.max(0, Math.round(lateMinutes)),
+    ot: Math.max(0, Number((otMinutes / 60).toFixed(2))),
+    early: Math.max(0, Math.round(earlyDepartureMinutes)),
   };
 }
 
