@@ -622,6 +622,31 @@ export const db = {
     }
   },
 
+  async getVirtualDat(fromDate?: string, toDate?: string): Promise<{ datText: string; count: number; error?: any }> {
+    const user = await this.getCurrentUser();
+    if (!user) return { datText: '', count: 0, error: 'غير مصرح بالدخول' };
+    try {
+      let url = '/api/devices/virtual-dat';
+      if (fromDate || toDate) {
+        const queryParams = new URLSearchParams();
+        if (fromDate) queryParams.append('fromDate', fromDate);
+        if (toDate) queryParams.append('toDate', toDate);
+        url += `?${queryParams.toString()}`;
+      }
+      const response = await fetch(url, {
+        headers: { 'x-user-id': user.id }
+      });
+      const parsed = await safeFetchJson<any>(response);
+      if (parsed.ok && parsed.data) {
+        return { datText: parsed.data.datText || '', count: parsed.data.count || 0 };
+      }
+      return { datText: '', count: 0, error: 'فشل جلب ملف DAT الأونلاين.' };
+    } catch (err: any) {
+      console.error('Error getting virtual DAT:', err);
+      return { datText: '', count: 0, error: err.message };
+    }
+  },
+
   async syncZkLogs(logIds: string[]): Promise<{ success: boolean; count: number; error?: any }> {
     const user = await this.getCurrentUser();
     if (!user) return { success: false, count: 0, error: 'غير مصرح بالدخول' };

@@ -1473,6 +1473,54 @@ async function startServer() {
     }
   });
 
+  // Convert online device logs to in-memory Virtual DAT string for the Smart Engine
+  app.get('/api/devices/virtual-dat', async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: 'غير مصرح بالدخول' });
+      }
+
+      const { fromDate, toDate, startDate, endDate } = req.query as any;
+      const start = fromDate || startDate;
+      const end = toDate || endDate;
+
+      const tenantDevices = await firebaseDb.getDevices(userId);
+      const tenantSNs = tenantDevices.map((d: any) => d.serial_number.toUpperCase());
+
+      let rawLogs = await firebaseDb.getRawLogsBySerialNumbers(tenantSNs);
+
+      // Filter by date range if specified
+      if (start || end) {
+        rawLogs = rawLogs.filter((l: any) => {
+          const logDate = l.timestamp ? l.timestamp.split(' ')[0] : (l.created_at ? l.created_at.split('T')[0] : '');
+          if (start && logDate < start) return false;
+          if (end && logDate > end) return false;
+          return true;
+        });
+      }
+
+      // Convert raw logs in memory to standard DAT format: PIN\tYYYY-MM-DD HH:MM:SS\t1\t0
+      const datLines = rawLogs.map((l: any) => {
+        const pin = (l.pin || '0').trim();
+        const ts = (l.timestamp || '').trim();
+        const status = l.status !== undefined ? l.status : 1;
+        return `${pin}\t${ts}\t${status}\t0`;
+      }).filter(line => line.length > 5);
+
+      const datText = datLines.join('\r\n');
+
+      res.json({
+        datText,
+        count: datLines.length,
+        period: { fromDate: start || null, toDate: end || null }
+      });
+    } catch (err) {
+      console.error('Virtual DAT API error:', err);
+      res.status(500).json({ error: 'حدث خطأ في تحويل بصمات الجهاز أونلاين بالذاكرة.' });
+    }
+  });
+
   // Pull and sync online logs into actual tenant attendance logs
   app.post('/api/devices/sync-logs', async (req, res) => {
     try {

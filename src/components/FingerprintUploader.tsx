@@ -7,7 +7,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, FileText, CheckCircle2, AlertTriangle, Play, ArrowRight, ArrowLeft, 
   RefreshCw, Layers, ShieldAlert, Check, X, HelpCircle, Info, Trash2, Calendar,
-  Network, Cpu, Wifi, Smartphone, Plus, Settings, User, Eye, CheckSquare
+  Network, Cpu, Wifi, Smartphone, Plus, Settings, User, Eye, CheckSquare, Zap
 } from 'lucide-react';
 import { db } from '../supabaseClient';
 import { Employee, ShiftSchedule, AttendanceLog } from '../types';
@@ -236,6 +236,41 @@ export default function FingerprintUploader({
     setFromDate(firstDay);
     setToDate(today);
     fetchCloudLogs(firstDay, today);
+  };
+
+  // In-Memory Virtual DAT Processing for Online Device Logs
+  const handleProcessOnlineLogsToSmartEngine = async () => {
+    setFetchingCloudLogs(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { datText, count, error: errMsg } = await db.getVirtualDat(fromDate, toDate);
+      if (errMsg) {
+        setError('حدث خطأ أثناء جلب البصمات أونلاين من السحابة.');
+        return;
+      }
+      if (!datText || !datText.trim() || count === 0) {
+        setError(`لا توجد حركات بصمة أونلاين مسجلة في السحابة للفترة المحددة من ${fromDate} إلى ${toDate}`);
+        return;
+      }
+
+      setFileName(`Online_Device_${fromDate}_to_${toDate}.dat`);
+      setRawText(datText);
+
+      // Pass virtual DAT text directly to the smart processor
+      handleParse(datText, 'auto', 'all');
+
+      // Switch to file tab to display Step 2 (Smart Engine Review step)
+      setActiveTab('file');
+
+      setSuccess(`تم جلب وتحويل ${count} حركة بصمة من جهاز البصمة أونلاين بالذاكرة (In-Memory Virtual DAT) وتمريرها بنجاح للمعالج الذكي!`);
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      console.error('Error processing virtual DAT:', err);
+      setError('فشل تحويل ومعالجة البصمات أونلاين عبر المعالج الذكي.');
+    } finally {
+      setFetchingCloudLogs(false);
+    }
   };
 
   useEffect(() => {
@@ -780,6 +815,14 @@ export default function FingerprintUploader({
         setDeviceSN('');
         setDeviceName('');
         await loadZkData();
+        
+        // Scroll down to the bottom of the device area so the user immediately sees the newly added device
+        setTimeout(() => {
+          const area = document.getElementById('online-device-scroll-area');
+          if (area) {
+            area.scrollTo({ top: area.scrollHeight, behavior: 'smooth' });
+          }
+        }, 150);
       } else {
         setError(result.error?.message || 'فشل تسجيل الجهاز.');
       }
@@ -1323,7 +1366,7 @@ export default function FingerprintUploader({
             </div>
 
             {/* Inner Content Area */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+            <div id="online-device-scroll-area" className="flex-1 overflow-y-auto py-4 space-y-4">
               {loadingZk && (
                 <div className="py-12 text-center space-y-2">
                   <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
@@ -1516,7 +1559,7 @@ export default function FingerprintUploader({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end pt-1">
                           {/* From Date */}
                           <div className="space-y-1 text-right">
                             <label className="text-[10px] text-slate-400 block font-sans">من تاريخ (From Date):</label>
@@ -1539,25 +1582,39 @@ export default function FingerprintUploader({
                             />
                           </div>
 
-                          {/* Fetch Cloud Logs Button */}
+                          {/* Primary: In-Memory Virtual DAT Processing Button */}
+                          <div className="sm:col-span-1">
+                            <button
+                              type="button"
+                              onClick={handleProcessOnlineLogsToSmartEngine}
+                              disabled={fetchingCloudLogs || loadingZk}
+                              className="w-full py-2 px-3 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 disabled:from-slate-800 disabled:to-slate-800 text-slate-950 disabled:text-slate-500 font-black rounded-lg text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/20 font-sans"
+                              title="يقوم بجلب الحركات وتحويلها في الذاكرة لتمريرها للمعالج الذكي لحساب الشفتات مباشرة"
+                            >
+                              {fetchingCloudLogs ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  <span>جاري التحويل بالذاكرة...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                                  <span>سحب ومعالجة بالذاكرة (DAT)</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Secondary: Fetch Cloud Logs List */}
                           <div>
                             <button
                               type="button"
                               onClick={() => fetchCloudLogs()}
                               disabled={fetchingCloudLogs || loadingZk}
-                              className="w-full py-2 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 text-slate-950 disabled:text-slate-500 font-extrabold rounded-lg text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow shadow-emerald-500/10 font-sans"
+                              className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 text-slate-200 disabled:text-slate-600 font-bold rounded-lg text-xs transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 font-sans"
                             >
-                              {fetchingCloudLogs ? (
-                                <>
-                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                  <span>جاري السحب...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <RefreshCw className="w-3.5 h-3.5" />
-                                  <span>سحب البصمات من السحابة</span>
-                                </>
-                              )}
+                              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                              <span>تحديث القائمة</span>
                             </button>
                           </div>
                         </div>
