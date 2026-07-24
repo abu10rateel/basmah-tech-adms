@@ -140,10 +140,10 @@ export default function App() {
   const IconComponent = subVisuals.icon;
 
   return (
-    <div id="main-layout" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
+    <div id="main-layout" className="h-full h-[100dvh] w-full bg-slate-950 text-slate-100 flex flex-col font-sans overflow-hidden selection:bg-emerald-500 selection:text-slate-950">
       
       {/* Top Professional Header (Operational Business View) */}
-      <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 px-3 sm:px-6 py-2.5 sm:py-3.5 print:hidden">
+      <header className="bg-slate-900 border-b border-slate-800 shrink-0 px-3 sm:px-6 py-2.5 sm:py-3.5 print:hidden z-30">
         <div className="w-full max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2.5 sm:gap-4">
           
           {/* Brand/Tenant Identity */}
@@ -196,7 +196,7 @@ export default function App() {
 
       {/* Navigation Tabs (Operational Views only) */}
       {!subStatus.isExpired && (
-        <nav className="bg-slate-900/95 border-b border-slate-800 px-2 sm:px-4 py-2 print:hidden sticky top-0 z-20 backdrop-blur-md shadow-sm">
+        <nav className="bg-slate-900/95 border-b border-slate-800 px-2 sm:px-4 py-2 print:hidden shrink-0 z-20 backdrop-blur-md shadow-sm">
           <div className="max-w-7xl mx-auto flex items-center justify-start md:justify-end gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none no-scrollbar py-0.5 px-1 touch-pan-x scroll-smooth">
             
             <button
@@ -252,7 +252,7 @@ export default function App() {
       )}
 
       {/* Main Content Stage with scroll protection */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6 overflow-visible">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 md:p-6 space-y-6 overflow-y-auto overflow-x-hidden scroll-smooth">
         {subStatus.isExpired ? (
           <div className="max-w-xl mx-auto py-12 px-6">
             <div className="bg-slate-900 border border-rose-500/20 rounded-2xl p-8 text-center space-y-6 shadow-xl shadow-rose-950/10">
@@ -306,7 +306,7 @@ export default function App() {
       </main>
 
       {/* Footer copyright */}
-      <footer className="py-6 border-t border-slate-900 text-center text-[10px] text-slate-600 font-medium font-sans mt-auto print:hidden">
+      <footer className="py-4 sm:py-5 border-t border-slate-900 text-center text-[10px] text-slate-600 font-medium font-sans shrink-0 print:hidden">
         <span>جميع الحقوق محفوظة لمستأجر البوابة © 2026 بصمة تك • تصميم مؤسسي معزول بالكامل بقوانين الحماية السحابية</span>
       </footer>
     </div>

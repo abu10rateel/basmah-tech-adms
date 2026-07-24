@@ -34,6 +34,7 @@
   "background_color": "#020617",
   "theme_color": "#020617",
   "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
   "orientation": "any",
   "categories": ["business", "utilities", "productivity"],
   "prefer_related_applications": false,
