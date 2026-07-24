@@ -1398,10 +1398,25 @@ async function startServer() {
         return res.status(401).json({ error: 'غير مصرح بالدخول' });
       }
 
+      const { fromDate, toDate, startDate, endDate } = req.query as any;
+      const start = fromDate || startDate;
+      const end = toDate || endDate;
+
       const tenantDevices = await firebaseDb.getDevices(userId);
       const tenantSNs = tenantDevices.map((d: any) => d.serial_number.toUpperCase());
 
-      const rawLogs = await firebaseDb.getRawLogsBySerialNumbers(tenantSNs);
+      let rawLogs = await firebaseDb.getRawLogsBySerialNumbers(tenantSNs);
+
+      // Filter by date range if provided
+      if (start || end) {
+        rawLogs = rawLogs.filter((l: any) => {
+          const logDate = l.timestamp ? l.timestamp.split(' ')[0] : (l.created_at ? l.created_at.split('T')[0] : '');
+          if (start && logDate < start) return false;
+          if (end && logDate > end) return false;
+          return true;
+        });
+      }
+
       const unsynced = rawLogs.filter((l: any) => !l.synced);
 
       const tenantEmployees = await firebaseDb.getEmployees(userId);
