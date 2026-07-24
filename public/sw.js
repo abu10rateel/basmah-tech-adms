@@ -11,14 +11,18 @@ const STATIC_ASSETS = [
   '/icons/icon-maskable-512.png'
 ];
 
-// Install Event - Pre-cache critical static assets
+// Install Event - Pre-cache critical static assets resiliently
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log('[SW] Pre-caching offline assets...');
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn('[SW] Caching warning (non-fatal):', err);
-      });
+      for (const asset of STATIC_ASSETS) {
+        try {
+          await cache.add(asset);
+        } catch (err) {
+          console.warn('[SW] Caching warning for asset:', asset, err);
+        }
+      }
     })
   );
   self.skipWaiting();

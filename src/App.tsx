@@ -13,7 +13,7 @@ import AttendanceRegister from './components/AttendanceRegister';
 import ReportingEngine from './components/ReportingEngine';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 import { db } from './supabaseClient';
-import { LogOut, UserCheck, Users, Clock, BarChart3, Database, Building2, Calendar, AlertTriangle, ShieldAlert, AlertCircle, MessageSquare, ExternalLink } from 'lucide-react';
+import { LogOut, UserCheck, Users, Clock, BarChart3, Database, Building2, Calendar, AlertTriangle, ShieldAlert, AlertCircle, MessageSquare, ExternalLink, Smartphone, Download } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 
 export default function App() {
@@ -21,6 +21,32 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'attendance' | 'reports' | 'employees' | 'shifts'>('attendance');
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowInstallBanner(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   useEffect(() => {
     // Listen to session state change (Handles both Supabase and Local fallback modes seamlessly)
@@ -176,6 +202,18 @@ export default function App() {
           {/* Operations Controls & Logout */}
           <div className="flex items-center gap-2 self-end sm:self-auto">
             
+            {/* Native PWA Install Button */}
+            {showInstallBanner && deferredPrompt && (
+              <button
+                onClick={handleInstallClick}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md shadow-emerald-950/20 transition cursor-pointer animate-bounce"
+                title="تثبيت تطبيق بصمة تك على جهازك"
+              >
+                <Download className="w-4 h-4 shrink-0" />
+                <span>تثبيت التطبيق</span>
+              </button>
+            )}
+
             {/* Cloud Connected Badge */}
             <div className="px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold flex items-center gap-1.5 border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
               <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
