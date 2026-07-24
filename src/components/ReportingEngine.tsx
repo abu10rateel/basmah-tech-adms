@@ -78,13 +78,23 @@ export default function ReportingEngine() {
         : empData.filter(e => e.id === selectedEmpId);
 
       filteredEmployees.forEach((emp) => {
-        const schedule = shiftData.find(s => s.id === emp.shift_schedule_id);
+        // Lookup employee's specific assigned shift schedule or fallback safely
+        const schedule = shiftData.find(s => s.id === emp.shift_schedule_id) || shiftData[0] || {
+          id: 'default',
+          user_id: '',
+          name: 'الوردية القياسية',
+          type: 'single' as const,
+          shift1_start: '08:00',
+          shift1_end: '16:00',
+          grace_minutes: 15,
+          overtime_threshold_minutes: 30
+        };
         const empLogs = logData.filter(l => l.employee_id === emp.id);
 
         const dailyCalculations: DailyCalculationResult[] = dateList.map((dateStr) => {
           const logForDay = empLogs.find(l => l.date === dateStr);
           
-          if (logForDay && schedule) {
+          if (logForDay) {
             return calculateDailyMetrics(logForDay, schedule);
           } else {
             // Absent/No logs recorded
@@ -603,12 +613,14 @@ export default function ReportingEngine() {
                 {/* Profile detail meta */}
                 <div className="print-grid print-grid-3 grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-950/60 rounded-xl border border-slate-850/60 text-[11px] relative z-10">
                   <div className="text-right">
-                    <span className="text-slate-500">نظام وردية الموظف: </span>
-                    <span className="text-slate-300 font-semibold">{schedule?.name || 'الدوام الاعتيادي الفردي'}</span>
+                    <span className="text-slate-500">الوردية المسندة: </span>
+                    <span className="text-emerald-400 font-bold">
+                      {schedule?.name || 'الوردية القياسية'} ({schedule?.shift1_start || '08:00'} - {schedule?.shift1_end || '16:00'})
+                    </span>
                   </div>
                   <div className="text-right">
                     <span className="text-slate-500">قالب الحساب المعتمد: </span>
-                    <span className="text-emerald-400 font-bold">
+                    <span className="text-slate-200 font-semibold">
                       {employee.is_dual_shift ? 'شفتين باليوم (صباحي ومسائي)' : 'شفت واحد أساسي'}
                     </span>
                   </div>

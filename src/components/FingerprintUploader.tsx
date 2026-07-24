@@ -466,8 +466,8 @@ export default function FingerprintUploader({
         return;
       }
 
-      // Find schedule
-      const schedule = shifts.find(s => s.id === matchedEmp.shift_schedule_id);
+      // Find assigned schedule for this employee
+      const schedule = shifts.find(s => s.id === matchedEmp.shift_schedule_id) || shifts[0];
       if (!schedule) {
         mappedPunches.push({ punch: p, operationalDate: p.date });
         return;
@@ -475,6 +475,11 @@ export default function FingerprintUploader({
 
       const shift_in = schedule.shift1_start;
       const shift_out = schedule.shift1_end;
+      const shift_in_min = timeToMinutes(shift_in);
+      const shift_out_min = timeToMinutes(shift_out);
+
+      const isOvernightShift = shift_out_min < shift_in_min || (schedule.checkout_end && timeToMinutes(schedule.checkout_end) < shift_in_min);
+
       const checkin_start = schedule.checkin_start || addMinutesToTimeStr(shift_in, -120);
       const checkout_start = schedule.checkout_start || addMinutesToTimeStr(shift_out, -120);
       const checkout_end = schedule.checkout_end || addMinutesToTimeStr(shift_out, 240);
@@ -485,11 +490,10 @@ export default function FingerprintUploader({
         return min < checkin_start_min ? min + 1440 : min;
       };
 
-      const shift_out_min = adjustTime(timeToMinutes(shift_out));
       const checkout_start_min = adjustTime(timeToMinutes(checkout_start));
       const checkout_end_min = adjustTime(timeToMinutes(checkout_end));
 
-      // Let's check if it falls within the checkout window of yesterday
+      // Calculate relative punch time for YESTERDAY
       const punchDateObj = p.dateTimeObj;
       const yesterdayDateObj = new Date(punchDateObj.getTime() - 24 * 60 * 60 * 1000);
       const yesterdayStr = `${yesterdayDateObj.getFullYear()}-${String(yesterdayDateObj.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDateObj.getDate()).padStart(2, '0')}`;
@@ -497,10 +501,10 @@ export default function FingerprintUploader({
       const punchTimeMin = timeToMinutes(p.time);
       const relMinToYesterday = 1440 + punchTimeMin;
 
-      const isYesterdayCheckout = relMinToYesterday >= checkout_start_min && relMinToYesterday <= checkout_end_min;
+      // Check if this punch belongs to YESTERDAY's overnight shift check-out
+      const isYesterdayCheckout = isOvernightShift && (relMinToYesterday >= checkout_start_min - 120 && relMinToYesterday <= checkout_end_min + 120);
 
-      // Only map to yesterday if the shift is overnight (shift_out_min > 1440)
-      if (isYesterdayCheckout && shift_out_min > 1440) {
+      if (isYesterdayCheckout) {
         mappedPunches.push({ punch: p, operationalDate: yesterdayStr });
       } else {
         mappedPunches.push({ punch: p, operationalDate: p.date });
@@ -539,7 +543,7 @@ export default function FingerprintUploader({
           shift1_check_out = uniqueTimes[uniqueTimes.length - 1] || null;
         }
       } else {
-        const schedule = shifts.find(s => s.id === matchedEmp.shift_schedule_id);
+        const schedule = shifts.find(s => s.id === matchedEmp.shift_schedule_id) || shifts[0];
         if (!schedule) {
           shift1_check_in = uniqueTimes[0] || null;
           if (uniqueTimes.length > 1) {
@@ -624,6 +628,24 @@ export default function FingerprintUploader({
             if (checkOutCandidates.length > 0) {
               checkOutCandidates.sort((a, b) => a.min - b.min);
               shift1_check_out = checkOutCandidates[checkOutCandidates.length - 1].time; // Last punch
+            }
+
+            // Smart Fallback for pairing punches if 2+ punches exist
+            if (!shift1_check_in && !shift1_check_out && uniqueTimes.length > 0) {
+              shift1_check_in = uniqueTimes[0];
+              if (uniqueTimes.length > 1) {
+                shift1_check_out = uniqueTimes[uniqueTimes.length - 1];
+              }
+            } else if (shift1_check_in && !shift1_check_out && uniqueTimes.length > 1) {
+              const lastPunchTime = sortedItems[sortedItems.length - 1].punch.time;
+              if (lastPunchTime !== shift1_check_in) {
+                shift1_check_out = lastPunchTime;
+              }
+            } else if (!shift1_check_in && shift1_check_out && uniqueTimes.length > 1) {
+              const firstPunchTime = sortedItems[0].punch.time;
+              if (firstPunchTime !== shift1_check_out) {
+                shift1_check_in = firstPunchTime;
+              }
             }
           }
         }

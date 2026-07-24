@@ -97,7 +97,7 @@ export function formatMinutesArabic(minutes: number): string {
 
 /**
  * Calculates metrics for a single shift check-in/out event.
- * Handles midnight cross logic gracefully.
+ * Handles midnight cross (night shift) logic gracefully for any shift times.
  */
 export function calculateSingleShiftMetrics(
   schedStartStr: string,
@@ -107,51 +107,65 @@ export function calculateSingleShiftMetrics(
   graceMinutes: number,
   overtimeThresholdMinutes: number
 ): { hours: number; late: number; ot: number; early: number } {
-  if (!actualStartStr || !actualEndStr) {
+  if (!actualStartStr && !actualEndStr) {
     return { hours: 0, late: 0, ot: 0, early: 0 };
   }
 
   const schedStart = timeToMinutes(schedStartStr);
   let schedEnd = timeToMinutes(schedEndStr);
-  if (schedEnd < schedStart) {
-    // Midnight cross in schedule (e.g. 22:00 to 06:00)
+  if (schedEnd <= schedStart) {
+    // Midnight cross in schedule (e.g. 22:00 to 06:00, or 18:00 to 02:00)
     schedEnd += 1440;
   }
   const schedDuration = schedEnd - schedStart;
 
-  let actStart = timeToMinutes(actualStartStr);
-  let actEnd = timeToMinutes(actualEndStr);
-  
-  if (actStart < schedStart - 480) {
-    actStart += 1440;
+  let actStart: number | null = null;
+  let actEnd: number | null = null;
+
+  if (actualStartStr) {
+    let min = timeToMinutes(actualStartStr);
+    // If night shift (schedEnd > 1440) and actual check-in occurs after midnight (e.g. 00:30 for a 22:00 shift)
+    if (schedEnd > 1440 && min < schedStart - 360) {
+      min += 1440;
+    }
+    actStart = min;
   }
-  if (actEnd < actStart) {
-    // Midnight cross in actual attendance (e.g. check-in 22:15, check-out 05:45)
-    actEnd += 1440;
+
+  if (actualEndStr) {
+    let min = timeToMinutes(actualEndStr);
+    if (actStart !== null && min < actStart) {
+      min += 1440;
+    } else if (actStart === null && schedEnd > 1440 && min < schedStart - 360) {
+      min += 1440;
+    }
+    actEnd = min;
   }
-  const actDuration = actEnd - actStart;
 
   // 1. Lateness (التأخير)
-  // If actual check-in is after scheduled start + grace minutes
   let lateMinutes = 0;
-  if (actStart > schedStart + graceMinutes) {
-    lateMinutes = actStart - schedStart;
+  if (actStart !== null) {
+    if (actStart > schedStart + graceMinutes) {
+      lateMinutes = actStart - schedStart;
+    }
   }
 
-  // 2. Actual hours worked
-  const hoursWorked = actDuration / 60;
-
-  // 3. Overtime (الوقت الإضافي)
-  // Overtime is calculated if actual duration exceeds scheduled duration + threshold
-  let otHours = 0;
-  if (actDuration > schedDuration + overtimeThresholdMinutes) {
-    otHours = (actDuration - schedDuration) / 60;
-  }
-
-  // 4. Early Departure (الخروج المبكر)
+  // 2. Early Departure (الخروج المبكر)
   let earlyDepartureMinutes = 0;
-  if (actEnd < schedEnd) {
-    earlyDepartureMinutes = schedEnd - actEnd;
+  if (actEnd !== null) {
+    if (actEnd < schedEnd) {
+      earlyDepartureMinutes = schedEnd - actEnd;
+    }
+  }
+
+  // 3. Working hours & Overtime
+  let hoursWorked = 0;
+  let otHours = 0;
+  if (actStart !== null && actEnd !== null && actEnd > actStart) {
+    const actDuration = actEnd - actStart;
+    hoursWorked = actDuration / 60;
+    if (actDuration > schedDuration + overtimeThresholdMinutes) {
+      otHours = (actDuration - schedDuration) / 60;
+    }
   }
 
   return {
@@ -187,8 +201,8 @@ export function calculateDailyMetrics(
     has_shift2: false,
   };
 
-  // Shift 1 Processing
-  if (log.shift1_check_in && log.shift1_check_out) {
+  // Shift 1 Processing: Consider present if check-in OR check-out exists
+  if (log.shift1_check_in || log.shift1_check_out) {
     result.has_shift1 = true;
     const s1 = calculateSingleShiftMetrics(
       schedule.shift1_start,
@@ -204,13 +218,12 @@ export function calculateDailyMetrics(
     result.shift1_early_departure = s1.early;
   }
 
-  // Shift 2 Processing (Only if schedule is dual AND employee is dual, and logs exist)
+  // Shift 2 Processing (Only if schedule is dual AND log has shift2 check-in/out)
   if (
     schedule.type === 'dual' &&
     schedule.shift2_start &&
     schedule.shift2_end &&
-    log.shift2_check_in &&
-    log.shift2_check_out
+    (log.shift2_check_in || log.shift2_check_out)
   ) {
     result.has_shift2 = true;
     const s2 = calculateSingleShiftMetrics(
@@ -228,9 +241,9 @@ export function calculateDailyMetrics(
   }
 
   // Combined calculations
-  result.total_hours = result.shift1_hours + result.shift2_hours;
+  result.total_hours = Number((result.shift1_hours + result.shift2_hours).toFixed(2));
   result.total_late = result.shift1_late + result.shift2_late;
-  result.total_ot = result.shift1_ot + result.shift2_ot;
+  result.total_ot = Number((result.shift1_ot + result.shift2_ot).toFixed(2));
   result.total_early_departure = result.shift1_early_departure + result.shift2_early_departure;
 
   return result;

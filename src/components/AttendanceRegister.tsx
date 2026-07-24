@@ -251,7 +251,7 @@ export default function AttendanceRegister() {
           <div className="space-y-6">
             {employees.map((emp) => {
               const edit = logEdits[emp.id] || {};
-              const schedule = shifts.find((s) => s.id === emp.shift_schedule_id);
+              const schedule = shifts.find((s) => s.id === emp.shift_schedule_id) || shifts[0];
               
               // Local preview calculation on-the-fly
               let calcResult: DailyCalculationResult | null = null;
