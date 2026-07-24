@@ -50,28 +50,18 @@ async function startServer() {
     next();
   });
 
-  // Root health check & ADMS Server status route
+  // Root route - Always delegate to SPA HTML handler so Chrome PWA installability audit receives index.html with 200 OK
   app.get('/', (req, res, next) => {
-    // If request asks for HTML, standalone mode, browser user agent, or PWA navigation, pass to SPA handler
-    const accept = req.headers['accept'] || '';
-    const userAgent = req.headers['user-agent'] || '';
-    const isBrowserOrPwa =
-      accept.includes('text/html') ||
-      req.query.mode === 'standalone' ||
-      req.headers['sec-fetch-dest'] === 'document' ||
-      userAgent.includes('Mozilla') ||
-      userAgent.includes('Chrome') ||
-      userAgent.includes('Safari');
-
-    if (isBrowserOrPwa) {
-      return next();
+    // If request is explicitly asking for ADMS text ping via query param, respond with text, otherwise pass to SPA
+    if (req.query.ping === 'adms' || req.query.adms === 'true') {
+      res.status(200);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send('OK - ZKTeco ADMS Server is Running');
     }
-    res.status(200);
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.send('OK - ZKTeco ADMS Server is Running');
+    next();
   });
 
-  // Explicit PWA Endpoints for Service Worker and Manifest
+  // Explicit PWA Static Endpoints for Service Worker, Manifest, and Icons
   app.get('/sw.js', (req, res) => {
     const swPath = path.join(process.cwd(), 'public', 'sw.js');
     const distSwPath = path.join(process.cwd(), 'dist', 'sw.js');
@@ -100,6 +90,10 @@ async function startServer() {
       res.status(404).send('Manifest not found');
     }
   });
+
+  // Ensure /icons directory is served reliably across environments
+  app.use('/icons', express.static(path.join(process.cwd(), 'public', 'icons')));
+  app.use('/icons', express.static(path.join(process.cwd(), 'dist', 'icons')));
 
   // --- API ROUTES FIRST ---
 
