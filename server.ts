@@ -5,6 +5,7 @@
 
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { firebaseDb } from './src/db/firebaseDb';
@@ -51,13 +52,53 @@ async function startServer() {
 
   // Root health check & ADMS Server status route
   app.get('/', (req, res, next) => {
-    // If request asks for HTML (e.g., browser opening dashboard UI), pass to SPA handler
-    if (req.headers.accept?.includes('text/html')) {
+    // If request asks for HTML, standalone mode, browser user agent, or PWA navigation, pass to SPA handler
+    const accept = req.headers['accept'] || '';
+    const userAgent = req.headers['user-agent'] || '';
+    const isBrowserOrPwa =
+      accept.includes('text/html') ||
+      req.query.mode === 'standalone' ||
+      req.headers['sec-fetch-dest'] === 'document' ||
+      userAgent.includes('Mozilla') ||
+      userAgent.includes('Chrome') ||
+      userAgent.includes('Safari');
+
+    if (isBrowserOrPwa) {
       return next();
     }
     res.status(200);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send('OK - ZKTeco ADMS Server is Running');
+  });
+
+  // Explicit PWA Endpoints for Service Worker and Manifest
+  app.get('/sw.js', (req, res) => {
+    const swPath = path.join(process.cwd(), 'public', 'sw.js');
+    const distSwPath = path.join(process.cwd(), 'dist', 'sw.js');
+    const targetPath = fs.existsSync(distSwPath) ? distSwPath : swPath;
+
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Service-Worker-Allowed', '/');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    if (fs.existsSync(targetPath)) {
+      res.sendFile(targetPath);
+    } else {
+      res.status(404).send('Service Worker not found');
+    }
+  });
+
+  app.get('/manifest.json', (req, res) => {
+    const manifestPath = path.join(process.cwd(), 'public', 'manifest.json');
+    const distManifestPath = path.join(process.cwd(), 'dist', 'manifest.json');
+    const targetPath = fs.existsSync(distManifestPath) ? distManifestPath : manifestPath;
+
+    res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    if (fs.existsSync(targetPath)) {
+      res.sendFile(targetPath);
+    } else {
+      res.status(404).send('Manifest not found');
+    }
   });
 
   // --- API ROUTES FIRST ---
@@ -1564,7 +1605,17 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('sw.js')) {
+          res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+          res.setHeader('Service-Worker-Allowed', '/');
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        } else if (filePath.endsWith('manifest.json')) {
+          res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+        }
+      }
+    }));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
