@@ -10,16 +10,17 @@ import { createServer as createViteServer } from 'vite';
 import { firebaseDb } from './src/db/firebaseDb';
 import { generateInvoicePdf, sendEmailWithAttachment, sendHtmlEmail, generatePasswordResetEmailHtml } from './src/lib/mailService';
 
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 async function startServer() {
   const app = express();
   app.use(express.json());
 
-  // ADMS Middleware for ZKTeco hardware requests - Bypass CORS and force plain/text headers
+  // ADMS & System Middleware - Bypass CORS and force plain/text headers for ZKTeco hardware
   app.use((req, res, next) => {
     const lowerPath = req.path.toLowerCase();
     const isAdms =
+      lowerPath === '/' ||
       lowerPath.startsWith('/iclock') ||
       lowerPath.startsWith('/cdata') ||
       lowerPath.startsWith('/adms') ||
@@ -1050,7 +1051,7 @@ async function startServer() {
   // 1. Endpoint to dynamically generate/retrieve a shortened URL for the current host (direct local proxy)
   app.get('/api/short-url', async (req, res) => {
     try {
-      const host = req.get('host') || req.headers.host || 'basmah-tk.ai.studio';
+      const host = req.get('host') || req.headers.host || 'basmah-tech.onrender.com';
       const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       
       // Directly return the official ADMS URL
@@ -1060,7 +1061,7 @@ async function startServer() {
       return res.json({ shortUrl, success: true });
     } catch (err) {
       console.error('[URL Shortener] Error generating shortened URL:', err);
-      const host = req.get('host') || req.headers.host || 'basmah-tk.ai.studio';
+      const host = req.get('host') || req.headers.host || 'basmah-tech.onrender.com';
       res.json({ shortUrl: `https://${host}/adms`, success: false });
     }
   });
