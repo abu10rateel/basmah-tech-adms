@@ -62,7 +62,7 @@ async function startServer() {
   });
 
   // Explicit PWA Static Endpoints for Service Worker, Manifest, and Icons
-  app.get('/sw.js', (req, res) => {
+  app.get(['/sw.js', '/service-worker.js', '/registerSW.js'], (req, res) => {
     const swPath = path.join(process.cwd(), 'public', 'sw.js');
     const distSwPath = path.join(process.cwd(), 'dist', 'sw.js');
     const targetPath = fs.existsSync(distSwPath) ? distSwPath : swPath;
@@ -77,7 +77,7 @@ async function startServer() {
     }
   });
 
-  app.get('/manifest.json', (req, res) => {
+  app.get(['/manifest.json', '/manifest.webmanifest'], (req, res) => {
     const manifestPath = path.join(process.cwd(), 'public', 'manifest.json');
     const distManifestPath = path.join(process.cwd(), 'dist', 'manifest.json');
     const targetPath = fs.existsSync(distManifestPath) ? distManifestPath : manifestPath;
@@ -88,6 +88,22 @@ async function startServer() {
       res.sendFile(targetPath);
     } else {
       res.status(404).send('Manifest not found');
+    }
+  });
+
+  // Serve root level icons
+  app.get(['/icon-192.png', '/icon-512.png'], (req, res) => {
+    const filename = req.path.replace('/', '');
+    const iconPath = path.join(process.cwd(), 'public', filename);
+    const distIconPath = path.join(process.cwd(), 'dist', filename);
+    const targetPath = fs.existsSync(distIconPath) ? distIconPath : iconPath;
+
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (fs.existsSync(targetPath)) {
+      res.sendFile(targetPath);
+    } else {
+      res.status(404).send('Icon not found');
     }
   });
 
