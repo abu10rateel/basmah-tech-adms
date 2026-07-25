@@ -1,21 +1,24 @@
 // Service Worker for Basmah Tech PWA - Standalone & Offline Support
-const CACHE_NAME = 'basmah-tech-pwa-v1';
+const CACHE_NAME = 'basmah-tech-pwa-v4';
 const STATIC_ASSETS = [
   '/',
-  '/?mode=standalone',
   '/index.html',
+  '/offline.html',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-192.png',
-  '/icons/icon-maskable-512.png'
+  '/icons/icon-maskable-512.png',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 // Install Event - Pre-cache critical static assets resiliently
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      console.log('[SW] Pre-caching offline assets...');
+      console.log('[SW] Pre-caching offline assets v3...');
       for (const asset of STATIC_ASSETS) {
         try {
           await cache.add(asset);
@@ -25,7 +28,6 @@ self.addEventListener('install', (event) => {
       }
     })
   );
-  self.skipWaiting();
 });
 
 // Activate Event - Clean old caches and claim clients immediately
@@ -40,9 +42,8 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 // Fetch Event - Handle network requests with fallback strategies
@@ -76,8 +77,10 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {
-          return caches.match('/') || caches.match('/index.html');
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          const cached = await cache.match('/') || await cache.match('/index.html');
+          return cached || (await cache.match('/offline.html')) || fetch(request);
         })
     );
     return;
