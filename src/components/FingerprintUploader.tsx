@@ -502,130 +502,80 @@ export default function FingerprintUploader({
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     };
 
-    // 1. Map each parsed punch to its correct operational shift date
-    const mappedPunches: { punch: ParsedPunch; operationalDate: string }[] = [];
-
+    // 1. Group raw punches by employee ID
+    const empPunchesMap: Record<string, ParsedPunch[]> = {};
     tempPunches.forEach((p) => {
-      const matchedEmp = p.matchedEmployee;
-      if (!matchedEmp) {
-        mappedPunches.push({ punch: p, operationalDate: p.date });
-        return;
-      }
-
-      // Find assigned schedule for this employee
-      const schedule = shifts.find(s => s.id === matchedEmp.shift_schedule_id) || shifts[0];
-      if (!schedule) {
-        mappedPunches.push({ punch: p, operationalDate: p.date });
-        return;
-      }
-
-      const sStart = timeToMinutes(schedule.shift1_start);
-      const rawEnd = timeToMinutes(schedule.shift1_end);
-      const isOvernight = rawEnd <= sStart;
-
-      if (isOvernight) {
-        const defaultCiStart = addMinutesToTimeStr(schedule.shift1_start, -120);
-        const defaultCoStart = addMinutesToTimeStr(schedule.shift1_end, -120);
-        const defaultCoEnd = addMinutesToTimeStr(schedule.shift1_end, 240);
-
-        const ciStartRaw = timeToMinutes(schedule.checkin_start || defaultCiStart);
-        const ciStartMin = ciStartRaw < sStart - 360 ? ciStartRaw + 1440 : ciStartRaw;
-
-        const coStartRaw = timeToMinutes(schedule.checkout_start || defaultCoStart);
-        const coStartMin = coStartRaw < ciStartMin ? coStartRaw + 1440 : coStartRaw;
-
-        const coEndRaw = timeToMinutes(schedule.checkout_end || defaultCoEnd);
-        const coEndMin = coEndRaw < coStartMin ? coEndRaw + 1440 : coEndRaw;
-
-        const punchDateObj = p.dateTimeObj;
-        const yesterdayDateObj = new Date(punchDateObj.getTime() - 24 * 60 * 60 * 1000);
-        const yesterdayStr = `${yesterdayDateObj.getFullYear()}-${String(yesterdayDateObj.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDateObj.getDate()).padStart(2, '0')}`;
-
-        const relMinToYesterday = 1440 + timeToMinutes(p.time);
-
-        if (relMinToYesterday >= coStartMin && relMinToYesterday <= coEndMin) {
-          mappedPunches.push({ punch: p, operationalDate: yesterdayStr });
-          return;
-        }
-      }
-
-      mappedPunches.push({ punch: p, operationalDate: p.date });
+      if (!empPunchesMap[p.rawEmpId]) empPunchesMap[p.rawEmpId] = [];
+      empPunchesMap[p.rawEmpId].push(p);
     });
 
-    // 2. Group punches by Employee and Operational Date
-    const groupedMap: Record<string, typeof mappedPunches> = {};
-    mappedPunches.forEach((item) => {
-      const key = `${item.punch.rawEmpId}_${item.operationalDate}`;
-      if (!groupedMap[key]) groupedMap[key] = [];
-      groupedMap[key].push(item);
+    const dailyLogs: GroupedDailyPunch[] = [];
+
+    // 2. Process each employee using shift window evaluation
+    Object.keys(empPunchesMap).forEach((rawEmpId) => {
+      const pList = empPunchesMap[rawEmpId];
+      const matchedEmp = pList[0].matchedEmployee;
+      const schedule = matchedEmp
+        ? (shifts.find((s) => s.id === matchedEmp.shift_schedule_id) || shifts[0])
+        : shifts[0];
+
+      // Collect all candidate dates (including previous calendar day for overnight checkout windows)
+      const datesSet = new Set<string>();
+      pList.forEach((p) => {
+        datesSet.add(p.date);
+        const pDateParts = p.date.split('-').map(Number);
+        const pDateObj = new Date(pDateParts[0], pDateParts[1] - 1, pDateParts[2], 0, 0, 0, 0);
+        const prevDateObj = new Date(pDateObj.getTime() - 86400000);
+        const prevDateStr = `${prevDateObj.getFullYear()}-${String(prevDateObj.getMonth() + 1).padStart(2, '0')}-${String(prevDateObj.getDate()).padStart(2, '0')}`;
+        datesSet.add(prevDateStr);
+      });
+
+      const candidateDates = Array.from(datesSet).sort();
+
+      candidateDates.forEach((dateStr) => {
+        if (!schedule) return;
+
+        // Pair ALL punches of this employee relative to candidate dateStr
+        const paired = pairPunchesByWindows(
+          dateStr,
+          schedule,
+          pList.map((p) => ({
+            time: p.time,
+            date: p.date,
+            dateTimeObj: p.dateTimeObj,
+          }))
+        );
+
+        // Raw punches occurring on calendar date dateStr
+        const rawPunchesOnCalendarDate = pList
+          .filter((p) => p.date === dateStr)
+          .map((p) => p.time);
+        const uniqueTimes = Array.from(new Set(rawPunchesOnCalendarDate));
+
+        const hasPairing =
+          paired.shift1_check_in !== null ||
+          paired.shift1_check_out !== null ||
+          paired.shift2_check_in !== null ||
+          paired.shift2_check_out !== null;
+
+        if (hasPairing || rawPunchesOnCalendarDate.length > 0) {
+          dailyLogs.push({
+            employeeId: rawEmpId,
+            matchedEmployee: matchedEmp,
+            date: dateStr,
+            punches: uniqueTimes,
+            shift1_check_in: paired.shift1_check_in,
+            shift1_check_out: paired.shift1_check_out,
+            shift2_check_in: paired.shift2_check_in,
+            shift2_check_out: paired.shift2_check_out,
+            warning: !matchedEmp ? 'الرقم الوظيفي غير مسجل بالنظام' : undefined,
+            selected: matchedEmp !== null,
+          });
+        }
+      });
     });
 
-    // 3. Process each group using BioTime rules
-    const dailyLogs: GroupedDailyPunch[] = Object.keys(groupedMap).map((key) => {
-      const items = groupedMap[key];
-      const firstItem = items[0];
-      const rawEmpId = firstItem.punch.rawEmpId;
-      const date = firstItem.operationalDate;
-      const matchedEmp = firstItem.punch.matchedEmployee;
-
-      const sortedItems = items.sort((a, b) => a.punch.dateTimeObj.getTime() - b.punch.dateTimeObj.getTime());
-      const uniqueTimes = Array.from(new Set(sortedItems.map(item => item.punch.time)));
-
-      let shift1_check_in: string | null = null;
-      let shift1_check_out: string | null = null;
-      let shift2_check_in: string | null = null;
-      let shift2_check_out: string | null = null;
-      let warning: string | undefined;
-
-      if (!matchedEmp) {
-        warning = 'الرقم الوظيفي غير مسجل بالنظام';
-        const schedule = shifts[0];
-        if (schedule) {
-          const paired = pairPunchesByWindows(
-            date,
-            schedule,
-            sortedItems.map(item => ({
-              time: item.punch.time,
-              date: item.punch.date,
-              dateTimeObj: item.punch.dateTimeObj
-            }))
-          );
-          shift1_check_in = paired.shift1_check_in;
-          shift1_check_out = paired.shift1_check_out;
-        }
-      } else {
-        const schedule = shifts.find(s => s.id === matchedEmp.shift_schedule_id) || shifts[0];
-        if (schedule) {
-          const paired = pairPunchesByWindows(
-            date,
-            schedule,
-            sortedItems.map(item => ({
-              time: item.punch.time,
-              date: item.punch.date,
-              dateTimeObj: item.punch.dateTimeObj
-            }))
-          );
-          shift1_check_in = paired.shift1_check_in;
-          shift1_check_out = paired.shift1_check_out;
-          shift2_check_in = paired.shift2_check_in;
-          shift2_check_out = paired.shift2_check_out;
-        }
-      }
-
-      return {
-        employeeId: rawEmpId,
-        matchedEmployee: matchedEmp,
-        date,
-        punches: uniqueTimes,
-        shift1_check_in,
-        shift1_check_out,
-        shift2_check_in,
-        shift2_check_out,
-        warning,
-        selected: matchedEmp !== null
-      };
-    });
-
+    // Sort logs: newest date first, then employee ID
     dailyLogs.sort((a, b) => {
       const dateCompare = b.date.localeCompare(a.date);
       if (dateCompare !== 0) return dateCompare;
@@ -633,6 +583,7 @@ export default function FingerprintUploader({
     });
 
     setGroupedLogs(dailyLogs);
+    setStep(2);
     setStep(2);
   };
 

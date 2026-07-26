@@ -135,28 +135,33 @@ export function pairPunchesByWindows(
   if (!schedule || !punches || punches.length === 0) return result;
 
   const baseParts = shiftDate.split('-').map(Number);
-  const baseDateObj = new Date(baseParts[0], baseParts[1] - 1, baseParts[2], 0, 0, 0);
+  const baseDateObj = new Date(baseParts[0], baseParts[1] - 1, baseParts[2], 0, 0, 0, 0);
+  const baseMs = baseDateObj.getTime();
 
-  const getPunchRelMin = (p: { time: string; date?: string; dateTimeObj?: Date }) => {
-    let punchMin = timeToMinutes(p.time);
-    if (p.date) {
+  // Convert each punch to relative minutes from baseDateObj (shift date 00:00:00)
+  const parsedPunches = punches.map((p) => {
+    let pMs: number;
+    if (p.dateTimeObj) {
+      pMs = p.dateTimeObj.getTime();
+    } else if (p.date) {
       const pParts = p.date.split('-').map(Number);
-      const pDateObj = new Date(pParts[0], pParts[1] - 1, pParts[2], 0, 0, 0);
-      const diffDays = Math.round((pDateObj.getTime() - baseDateObj.getTime()) / (1000 * 60 * 60 * 24));
-      return punchMin + diffDays * 1440;
-    } else if (p.dateTimeObj) {
-      const diffMs = p.dateTimeObj.getTime() - baseDateObj.getTime();
-      return Math.floor(diffMs / (1000 * 60));
+      const pTimeMins = timeToMinutes(p.time);
+      const pDateObj = new Date(pParts[0], pParts[1] - 1, pParts[2], 0, 0, 0, 0);
+      pMs = pDateObj.getTime() + pTimeMins * 60 * 1000;
+    } else {
+      const pTimeMins = timeToMinutes(p.time);
+      pMs = baseMs + pTimeMins * 60 * 1000;
     }
-    return punchMin;
-  };
 
-  const parsedPunches = punches.map((p) => ({
-    time: p.time,
-    relMin: getPunchRelMin(p),
-  }));
+    const relMin = (pMs - baseMs) / (1000 * 60);
+    return {
+      time: p.time,
+      relMin,
+      pMs,
+    };
+  });
 
-  const resolveWindows = (
+  const resolveShiftWindows = (
     sStartStr: string,
     sEndStr: string,
     ciStartStr?: string,
@@ -164,32 +169,30 @@ export function pairPunchesByWindows(
     coStartStr?: string,
     coEndStr?: string
   ) => {
-    const sStart = timeToMinutes(sStartStr);
-    const rawEnd = timeToMinutes(sEndStr);
+    const sStart = timeToMinutes(sStartStr || '08:00');
+    const rawEnd = timeToMinutes(sEndStr || '16:00');
     const isOvernight = rawEnd <= sStart;
 
-    const defaultCiStart = addMinutesToTimeStr(sStartStr, -120);
-    const defaultCiEnd = addMinutesToTimeStr(sStartStr, 180);
-    const defaultCoStart = addMinutesToTimeStr(sEndStr, -120);
-    const defaultCoEnd = addMinutesToTimeStr(sEndStr, 240);
+    const defaultCiStart = addMinutesToTimeStr(sStartStr || '08:00', -120);
+    const defaultCiEnd = addMinutesToTimeStr(sStartStr || '08:00', 180);
+    const defaultCoStart = addMinutesToTimeStr(sEndStr || '16:00', -120);
+    const defaultCoEnd = addMinutesToTimeStr(sEndStr || '16:00', 240);
 
-    const ciStartRaw = timeToMinutes(ciStartStr || defaultCiStart);
-    const ciStartMin = ciStartRaw < sStart - 360 ? ciStartRaw + 1440 : ciStartRaw;
+    const ciStartMin = timeToMinutes(ciStartStr || defaultCiStart);
 
-    const ciEndRaw = timeToMinutes(ciEndStr || defaultCiEnd);
-    const ciEndMin = ciEndRaw < ciStartMin ? ciEndRaw + 1440 : ciEndRaw;
+    const adjustTime = (min: number) => {
+      return min < ciStartMin ? min + 1440 : min;
+    };
 
-    const coStartRaw = timeToMinutes(coStartStr || defaultCoStart);
-    const coStartMin = coStartRaw < ciStartMin ? coStartRaw + 1440 : coStartRaw;
+    const ciEndMin = adjustTime(timeToMinutes(ciEndStr || defaultCiEnd));
+    const coStartMin = adjustTime(timeToMinutes(coStartStr || defaultCoStart));
+    const coEndMin = adjustTime(timeToMinutes(coEndStr || defaultCoEnd));
 
-    const coEndRaw = timeToMinutes(coEndStr || defaultCoEnd);
-    const coEndMin = coEndRaw < coStartMin ? coEndRaw + 1440 : coEndRaw;
-
-    return { sStart, rawEnd, isOvernight, ciStartMin, ciEndMin, coStartMin, coEndMin };
+    return { sStart, ciStartMin, ciEndMin, coStartMin, coEndMin };
   };
 
   // Shift 1
-  const w1 = resolveWindows(
+  const w1 = resolveShiftWindows(
     schedule.shift1_start,
     schedule.shift1_end,
     schedule.checkin_start,
@@ -198,22 +201,26 @@ export function pairPunchesByWindows(
     schedule.checkout_end
   );
 
+  // Candidates for Shift 1 Check-In (strictly inside w1.ciStartMin .. w1.ciEndMin)
   const s1Ci = parsedPunches.filter((p) => p.relMin >= w1.ciStartMin && p.relMin <= w1.ciEndMin);
+  // Candidates for Shift 1 Check-Out (strictly inside w1.coStartMin .. w1.coEndMin)
   const s1Co = parsedPunches.filter((p) => p.relMin >= w1.coStartMin && p.relMin <= w1.coEndMin);
 
   if (s1Ci.length > 0) {
     s1Ci.sort((a, b) => a.relMin - b.relMin);
+    // Take FIRST punch in Check-In window
     result.shift1_check_in = s1Ci[0].time;
   }
 
   if (s1Co.length > 0) {
     s1Co.sort((a, b) => a.relMin - b.relMin);
+    // Take LAST punch in Check-Out window
     result.shift1_check_out = s1Co[s1Co.length - 1].time;
   }
 
   // Shift 2
   if (schedule.type === 'dual' && schedule.shift2_start && schedule.shift2_end) {
-    const w2 = resolveWindows(
+    const w2 = resolveShiftWindows(
       schedule.shift2_start,
       schedule.shift2_end,
       schedule.checkin2_start,
