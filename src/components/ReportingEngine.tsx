@@ -641,8 +641,10 @@ export default function ReportingEngine() {
                           <tr className="text-[10px] text-slate-400 uppercase">
                             <th className="sticky top-0 right-0 bg-slate-950 z-30 px-3 py-2 text-right border-b border-slate-800 border-l border-slate-800/80 text-emerald-400 font-extrabold">اليوم والتاريخ</th>
                             <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800">الحالة</th>
-                            <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800">الشفت 1 (حضور/انصراف)</th>
-                            {employee.is_dual_shift && <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800">الشفت 2 (حضور/انصراف)</th>}
+                            <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800 text-emerald-400 font-bold">وقت الدخول</th>
+                            <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800 text-amber-400 font-bold">وقت الخروج</th>
+                            {employee.is_dual_shift && <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800 text-emerald-400 font-bold">دخول (شفت 2)</th>}
+                            {employee.is_dual_shift && <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800 text-amber-400 font-bold">خروج (شفت 2)</th>}
                             <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800">ساعات العمل</th>
                             <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800">التأخير</th>
                             <th className="sticky top-0 bg-slate-950 z-20 px-3 py-2 text-center border-b border-slate-800">الخروج المبكر</th>
@@ -670,13 +672,21 @@ export default function ReportingEngine() {
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-3 py-1.5 text-center font-mono text-[11px]">
-                                  {rawLog?.shift1_check_in || '—'} / {rawLog?.shift1_check_out || '—'}
+                                <td className="px-3 py-1.5 text-center font-mono text-[11px] text-emerald-400 font-bold">
+                                  {rawLog?.shift1_check_in || '—'}
+                                </td>
+                                <td className="px-3 py-1.5 text-center font-mono text-[11px] text-amber-400 font-bold">
+                                  {rawLog?.shift1_check_out || '—'}
                                 </td>
                                 {employee.is_dual_shift && (
-                                  <td className="px-3 py-1.5 text-center font-mono text-[11px]">
-                                    {rawLog?.shift2_check_in || '—'} / {rawLog?.shift2_check_out || '—'}
-                                  </td>
+                                  <>
+                                    <td className="px-3 py-1.5 text-center font-mono text-[11px] text-emerald-400 font-bold">
+                                      {rawLog?.shift2_check_in || '—'}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-center font-mono text-[11px] text-amber-400 font-bold">
+                                      {rawLog?.shift2_check_out || '—'}
+                                    </td>
+                                  </>
                                 )}
                                 <td className="px-3 py-1.5 text-center font-bold text-slate-200">
                                   <span className="font-mono text-[11px]">{isPresent ? formatHoursToHHMM(day.total_hours) : '00:00'}</span>

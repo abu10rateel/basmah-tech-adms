@@ -1103,8 +1103,10 @@ export default function FingerprintUploader({
                           <th className="p-3 w-10">اختر</th>
                           <th className="p-3">الموظف</th>
                           <th className="p-3">التاريخ</th>
-                          <th className="p-3 text-center">الشيفت الأول (حضور / انصراف)</th>
-                          <th className="p-3 text-center">الشيفت الثاني (حضور / انصراف)</th>
+                          <th className="p-3 text-center text-emerald-400 font-bold">وقت الدخول</th>
+                          <th className="p-3 text-center text-amber-400 font-bold">وقت الخروج</th>
+                          <th className="p-3 text-center text-emerald-400 font-bold">دخول (شفت 2)</th>
+                          <th className="p-3 text-center text-amber-400 font-bold">خروج (شفت 2)</th>
                           <th className="p-3">الحركات الخام المقروءة</th>
                           <th className="p-3 text-right">الحالة</th>
                         </tr>
@@ -1133,23 +1135,17 @@ export default function FingerprintUploader({
                                 </div>
                               </td>
                               <td className="p-3 font-mono text-slate-300">{log.date}</td>
-                              <td className="p-3 text-center">
-                                <div className="inline-flex items-center gap-1 bg-slate-950 border border-slate-850 px-2.5 py-1 rounded-lg">
-                                  <span className="text-emerald-400 font-mono text-[11px] font-bold">{log.shift1_check_in || '--:--'}</span>
-                                  <span className="text-slate-600">/</span>
-                                  <span className="text-amber-400 font-mono text-[11px] font-bold">{log.shift1_check_out || '--:--'}</span>
-                                </div>
+                              <td className="p-3 text-center font-mono text-[11px] font-bold text-emerald-400">
+                                {log.shift1_check_in || '—'}
                               </td>
-                              <td className="p-3 text-center">
-                                {log.matchedEmployee?.is_dual_shift ? (
-                                  <div className="inline-flex items-center gap-1 bg-slate-950 border border-slate-850 px-2.5 py-1 rounded-lg">
-                                    <span className="text-emerald-400 font-mono text-[11px] font-bold">{log.shift2_check_in || '--:--'}</span>
-                                    <span className="text-slate-600">/</span>
-                                    <span className="text-amber-400 font-mono text-[11px] font-bold">{log.shift2_check_out || '--:--'}</span>
-                                  </div>
-                                ) : (
-                                  <span className="text-[10px] text-slate-600">— وردية واحدة —</span>
-                                )}
+                              <td className="p-3 text-center font-mono text-[11px] font-bold text-amber-400">
+                                {log.shift1_check_out || '—'}
+                              </td>
+                              <td className="p-3 text-center font-mono text-[11px] font-bold text-emerald-400">
+                                {log.matchedEmployee?.is_dual_shift ? (log.shift2_check_in || '—') : '—'}
+                              </td>
+                              <td className="p-3 text-center font-mono text-[11px] font-bold text-amber-400">
+                                {log.matchedEmployee?.is_dual_shift ? (log.shift2_check_out || '—') : '—'}
                               </td>
                               <td className="p-3 font-mono text-[10px] text-slate-400 max-w-[120px] truncate">
                                 {log.punches.join(', ')}
