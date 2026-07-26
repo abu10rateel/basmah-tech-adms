@@ -1563,6 +1563,13 @@ async function startServer() {
       const tenantEmployees = await firebaseDb.getEmployees(userId);
       const grouping: Record<string, { employee: any; date: string; times: string[] }> = {};
 
+      // Punches before this hour are treated as belonging to the PREVIOUS operational
+      // day (e.g. a 04:00 check-out that closes a shift started the night before).
+      // Without this, punches after midnight get grouped under a brand-new calendar
+      // date and get cut off from the rest of that day's punches (dual-shift / night
+      // shift employees end up missing their check-out entirely).
+      const OPERATIONAL_DAY_CUTOFF_HOUR = 6;
+
       targetLogs.forEach((l: any) => {
         const emp = tenantEmployees.find(
           (e: any) => e.emp_id.trim().toLowerCase() === l.pin.trim().toLowerCase()
@@ -1572,16 +1579,29 @@ async function startServer() {
         const [datePart, timePart] = l.timestamp.split(' ');
         if (!datePart || !timePart) return;
 
-        const key = `${emp.id}_${datePart}`;
+        const [h, m] = timePart.split(':');
+        const cleanTime = `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+
+        const hourNum = parseInt(h, 10);
+        let operationalDate = datePart;
+        if (!isNaN(hourNum) && hourNum < OPERATIONAL_DAY_CUTOFF_HOUR) {
+          const [y, mo, d] = datePart.split('-').map(Number);
+          const dateObj = new Date(y, (mo || 1) - 1, d || 1);
+          dateObj.setDate(dateObj.getDate() - 1);
+          const py = dateObj.getFullYear();
+          const pm = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const pd = String(dateObj.getDate()).padStart(2, '0');
+          operationalDate = `${py}-${pm}-${pd}`;
+        }
+
+        const key = `${emp.id}_${operationalDate}`;
         if (!grouping[key]) {
           grouping[key] = {
             employee: emp,
-            date: datePart,
+            date: operationalDate,
             times: []
           };
         }
-        const [h, m] = timePart.split(':');
-        const cleanTime = `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
         grouping[key].times.push(cleanTime);
       });
 
