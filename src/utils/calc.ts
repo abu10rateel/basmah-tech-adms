@@ -235,32 +235,41 @@ export function pairPunchesByWindows(
   // Candidates for Shift 1 Check-Out (strictly inside w1.coStartMin .. w1.coEndMin)
   const s1Co = parsedPunches.filter((p) => p.relMin >= w1.coStartMin && p.relMin <= w1.coEndMin);
 
+  // Track relMin alongside the selected punch value (not just the time string)
+  // to avoid mismatches when two different punches share the same HH:MM text.
+  let s1InRelMin: number | null = null;
+  let s1OutRelMin: number | null = null;
+
   if (s1Ci.length > 0) {
     s1Ci.sort((a, b) => a.relMin - b.relMin);
     // Take FIRST punch in Check-In window
     result.shift1_check_in = s1Ci[0].time;
+    s1InRelMin = s1Ci[0].relMin;
   }
 
   if (s1Co.length > 0) {
     s1Co.sort((a, b) => a.relMin - b.relMin);
     // Take LAST punch in Check-Out window
     result.shift1_check_out = s1Co[s1Co.length - 1].time;
+    s1OutRelMin = s1Co[s1Co.length - 1].relMin;
   }
 
   // Fallback if window matching gave nothing or only one punch for shift 1
   if (!result.shift1_check_in && !result.shift1_check_out && parsedPunches.length > 0) {
     const sorted = [...parsedPunches].sort((a, b) => a.relMin - b.relMin);
     result.shift1_check_in = sorted[0].time;
+    s1InRelMin = sorted[0].relMin;
     if (sorted.length > 1) {
       result.shift1_check_out = sorted[sorted.length - 1].time;
+      s1OutRelMin = sorted[sorted.length - 1].relMin;
     }
   }
 
-  // Ensure shift1_check_in is chronologically BEFORE or equal to shift1_check_out
-  if (result.shift1_check_in && result.shift1_check_out) {
-    const pIn = parsedPunches.find((p) => p.time === result.shift1_check_in);
-    const pOut = parsedPunches.find((p) => p.time === result.shift1_check_out);
-    if (pIn && pOut && pIn.relMin > pOut.relMin) {
+  // Ensure shift1_check_in is chronologically BEFORE or equal to shift1_check_out.
+  // Compare using the numeric relMin values captured above (not a text re-lookup),
+  // so identical HH:MM strings on different days can never be mismatched.
+  if (result.shift1_check_in && result.shift1_check_out && s1InRelMin !== null && s1OutRelMin !== null) {
+    if (s1InRelMin > s1OutRelMin) {
       const temp = result.shift1_check_in;
       result.shift1_check_in = result.shift1_check_out;
       result.shift1_check_out = temp;
@@ -281,20 +290,23 @@ export function pairPunchesByWindows(
     const s2Ci = parsedPunches.filter((p) => p.relMin >= w2.ciStartMin && p.relMin <= w2.ciEndMin);
     const s2Co = parsedPunches.filter((p) => p.relMin >= w2.coStartMin && p.relMin <= w2.coEndMin);
 
+    let s2InRelMin: number | null = null;
+    let s2OutRelMin: number | null = null;
+
     if (s2Ci.length > 0) {
       s2Ci.sort((a, b) => a.relMin - b.relMin);
       result.shift2_check_in = s2Ci[0].time;
+      s2InRelMin = s2Ci[0].relMin;
     }
 
     if (s2Co.length > 0) {
       s2Co.sort((a, b) => a.relMin - b.relMin);
       result.shift2_check_out = s2Co[s2Co.length - 1].time;
+      s2OutRelMin = s2Co[s2Co.length - 1].relMin;
     }
 
-    if (result.shift2_check_in && result.shift2_check_out) {
-      const pIn2 = parsedPunches.find((p) => p.time === result.shift2_check_in);
-      const pOut2 = parsedPunches.find((p) => p.time === result.shift2_check_out);
-      if (pIn2 && pOut2 && pIn2.relMin > pOut2.relMin) {
+    if (result.shift2_check_in && result.shift2_check_out && s2InRelMin !== null && s2OutRelMin !== null) {
+      if (s2InRelMin > s2OutRelMin) {
         const temp2 = result.shift2_check_in;
         result.shift2_check_in = result.shift2_check_out;
         result.shift2_check_out = temp2;
