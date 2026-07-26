@@ -218,6 +218,26 @@ export function pairPunchesByWindows(
     result.shift1_check_out = s1Co[s1Co.length - 1].time;
   }
 
+  // Fallback if window matching gave nothing or only one punch for shift 1
+  if (!result.shift1_check_in && !result.shift1_check_out && parsedPunches.length > 0) {
+    const sorted = [...parsedPunches].sort((a, b) => a.relMin - b.relMin);
+    result.shift1_check_in = sorted[0].time;
+    if (sorted.length > 1) {
+      result.shift1_check_out = sorted[sorted.length - 1].time;
+    }
+  }
+
+  // Ensure shift1_check_in is chronologically BEFORE or equal to shift1_check_out
+  if (result.shift1_check_in && result.shift1_check_out) {
+    const pIn = parsedPunches.find((p) => p.time === result.shift1_check_in);
+    const pOut = parsedPunches.find((p) => p.time === result.shift1_check_out);
+    if (pIn && pOut && pIn.relMin > pOut.relMin) {
+      const temp = result.shift1_check_in;
+      result.shift1_check_in = result.shift1_check_out;
+      result.shift1_check_out = temp;
+    }
+  }
+
   // Shift 2
   if (schedule.type === 'dual' && schedule.shift2_start && schedule.shift2_end) {
     const w2 = resolveShiftWindows(
@@ -240,6 +260,16 @@ export function pairPunchesByWindows(
     if (s2Co.length > 0) {
       s2Co.sort((a, b) => a.relMin - b.relMin);
       result.shift2_check_out = s2Co[s2Co.length - 1].time;
+    }
+
+    if (result.shift2_check_in && result.shift2_check_out) {
+      const pIn2 = parsedPunches.find((p) => p.time === result.shift2_check_in);
+      const pOut2 = parsedPunches.find((p) => p.time === result.shift2_check_out);
+      if (pIn2 && pOut2 && pIn2.relMin > pOut2.relMin) {
+        const temp2 = result.shift2_check_in;
+        result.shift2_check_in = result.shift2_check_out;
+        result.shift2_check_out = temp2;
+      }
     }
   }
 

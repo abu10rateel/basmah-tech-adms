@@ -1614,7 +1614,19 @@ async function startServer() {
         if (logRecord.shift2_check_out) combinedTimesSet.add(logRecord.shift2_check_out);
         sortedTimes.forEach(t => combinedTimesSet.add(t));
 
-        const finalSortedTimes = Array.from(combinedTimesSet).sort();
+        const empSchedules = await firebaseDb.getSchedules(userId);
+        const schedule = empSchedules.find((s: any) => s.id === employee.shift_schedule_id) || empSchedules[0];
+
+        const s1Start = schedule?.shift1_start || '08:00';
+        const s1StartMin = (s1Start.split(':').map(Number)[0] * 60) + s1Start.split(':').map(Number)[1];
+
+        const timeToRelMin = (t: string) => {
+          const parts = t.split(':').map(Number);
+          const min = (parts[0] || 0) * 60 + (parts[1] || 0);
+          return min < s1StartMin - 360 ? min + 1440 : min;
+        };
+
+        const finalSortedTimes = Array.from(combinedTimesSet).sort((a, b) => timeToRelMin(a) - timeToRelMin(b));
 
         if (finalSortedTimes.length > 0) {
           if (isDual) {
