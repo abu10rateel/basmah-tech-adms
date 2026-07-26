@@ -1,3 +1,4 @@
+import { TimeInput24 } from './TimeInput24';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -335,12 +336,7 @@ export default function AttendanceRegister() {
                           {emp.is_dual_shift ? 'الشفت الأول: حضور' : 'بصمة الحضور'}
                         </label>
                         <div className="flex gap-1.5">
-                          <input
-                            type="time"
-                            value={edit.shift1_check_in || ''}
-                            onChange={(e) => handleTimeChange(emp.id, 'shift1_check_in', e.target.value)}
-                            className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                          />
+                          <TimeInput24 value={edit.shift1_check_in || ''} onChange={(v) => handleTimeChange(emp.id, 'shift1_check_in', v)} />
                           <button
                             type="button"
                             onClick={() => handleQuickStamp(emp.id, 'shift1_check_in')}
@@ -357,12 +353,7 @@ export default function AttendanceRegister() {
                           {emp.is_dual_shift ? 'الشفت الأول: انصراف' : 'بصمة الانصراف'}
                         </label>
                         <div className="flex gap-1.5">
-                          <input
-                            type="time"
-                            value={edit.shift1_check_out || ''}
-                            onChange={(e) => handleTimeChange(emp.id, 'shift1_check_out', e.target.value)}
-                            className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                          />
+                          <TimeInput24 value={edit.shift1_check_out || ''} onChange={(v) => handleTimeChange(emp.id, 'shift1_check_out', v)} />
                           <button
                             type="button"
                             onClick={() => handleQuickStamp(emp.id, 'shift1_check_out')}
@@ -382,12 +373,7 @@ export default function AttendanceRegister() {
                           <div className="space-y-1">
                             <label className="block text-[10px] text-slate-400">الشفت الثاني: حضور</label>
                             <div className="flex gap-1.5">
-                              <input
-                                type="time"
-                                value={edit.shift2_check_in || ''}
-                                onChange={(e) => handleTimeChange(emp.id, 'shift2_check_in', e.target.value)}
-                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                              />
+                              <TimeInput24 value={edit.shift2_check_in || ''} onChange={(v) => handleTimeChange(emp.id, 'shift2_check_in', v)} />
                               <button
                                 type="button"
                                 onClick={() => handleQuickStamp(emp.id, 'shift2_check_in')}
@@ -402,12 +388,7 @@ export default function AttendanceRegister() {
                           <div className="space-y-1">
                             <label className="block text-[10px] text-slate-400">الشفت الثاني: انصراف</label>
                             <div className="flex gap-1.5">
-                              <input
-                                type="time"
-                                value={edit.shift2_check_out || ''}
-                                onChange={(e) => handleTimeChange(emp.id, 'shift2_check_out', e.target.value)}
-                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                              />
+                              <TimeInput24 value={edit.shift2_check_out || ''} onChange={(v) => handleTimeChange(emp.id, 'shift2_check_out', v)} />
                               <button
                                 type="button"
                                 onClick={() => handleQuickStamp(emp.id, 'shift2_check_out')}

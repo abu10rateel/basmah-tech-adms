@@ -96,6 +96,35 @@ export function formatMinutesArabic(minutes: number): string {
 }
 
 /**
+ * Ensures any time string (e.g. "05:00 PM", "5:00 م", "17:00", "17:00:00") is formatted as 24-hour HH:MM.
+ */
+export function formatTo24Hour(timeStr?: string | null): string {
+  if (!timeStr) return '—';
+  let str = timeStr.trim();
+  if (!str || str === '—') return '—';
+
+  const isPM = /pm|م|مساء/i.test(str);
+  const isAM = /am|ص|صباح/i.test(str);
+  str = str.replace(/am|pm|ص|م|صباحاً|مساءً|صباح|مساء/gi, '').trim();
+
+  const parts = str.split(':');
+  if (parts.length >= 2) {
+    let hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    if (isNaN(hours) || isNaN(minutes)) return timeStr;
+
+    if (isPM && hours < 12) hours += 12;
+    if (isAM && hours === 12) hours = 0;
+
+    const hStr = String(hours).padStart(2, '0');
+    const mStr = String(minutes).padStart(2, '0');
+    return `${hStr}:${mStr}`;
+  }
+
+  return timeStr;
+}
+
+/**
  * Helper to add/subtract minutes from HH:MM string.
  */
 export function addMinutesToTimeStr(timeStr: string, minutesToAdd: number): string {

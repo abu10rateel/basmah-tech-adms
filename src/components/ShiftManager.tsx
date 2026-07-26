@@ -1,3 +1,5 @@
+import { TimeInput24 } from './TimeInput24';
+import { formatTo24Hour } from '../utils/calc';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -118,20 +120,20 @@ export default function ShiftManager() {
     setEditId(shift.id);
     setName(shift.name);
     setType(shift.type);
-    setShift1Start(shift.shift1_start);
-    setShift1End(shift.shift1_end);
-    setShift2Start(shift.shift2_start || '17:00');
-    setShift2End(shift.shift2_end || '21:00');
+    setShift1Start(formatTo24Hour(shift.shift1_start));
+    setShift1End(formatTo24Hour(shift.shift1_end));
+    setShift2Start(formatTo24Hour(shift.shift2_start || '17:00'));
+    setShift2End(formatTo24Hour(shift.shift2_end || '21:00'));
     setGraceMinutes(shift.grace_minutes);
     setOvertimeThreshold(shift.overtime_threshold_minutes);
-    setCheckinStart(shift.checkin_start || addMinutesToTimeStr(shift.shift1_start, -120));
-    setCheckinEnd(shift.checkin_end || addMinutesToTimeStr(shift.shift1_start, 180));
-    setCheckoutStart(shift.checkout_start || addMinutesToTimeStr(shift.shift1_end, -120));
-    setCheckoutEnd(shift.checkout_end || addMinutesToTimeStr(shift.shift1_end, 240));
-    setCheckin2Start(shift.checkin2_start || addMinutesToTimeStr(shift.shift2_start || '17:00', -120));
-    setCheckin2End(shift.checkin2_end || addMinutesToTimeStr(shift.shift2_start || '17:00', 180));
-    setCheckout2Start(shift.checkout2_start || addMinutesToTimeStr(shift.shift2_end || '21:00', -120));
-    setCheckout2End(shift.checkout2_end || addMinutesToTimeStr(shift.shift2_end || '21:00', 240));
+    setCheckinStart(formatTo24Hour(shift.checkin_start || addMinutesToTimeStr(shift.shift1_start, -120)));
+    setCheckinEnd(formatTo24Hour(shift.checkin_end || addMinutesToTimeStr(shift.shift1_start, 180)));
+    setCheckoutStart(formatTo24Hour(shift.checkout_start || addMinutesToTimeStr(shift.shift1_end, -120)));
+    setCheckoutEnd(formatTo24Hour(shift.checkout_end || addMinutesToTimeStr(shift.shift1_end, 240)));
+    setCheckin2Start(formatTo24Hour(shift.checkin2_start || addMinutesToTimeStr(shift.shift2_start || '17:00', -120)));
+    setCheckin2End(formatTo24Hour(shift.checkin2_end || addMinutesToTimeStr(shift.shift2_start || '17:00', 180)));
+    setCheckout2Start(formatTo24Hour(shift.checkout2_start || addMinutesToTimeStr(shift.shift2_end || '21:00', -120)));
+    setCheckout2End(formatTo24Hour(shift.checkout2_end || addMinutesToTimeStr(shift.shift2_end || '21:00', 240)));
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -195,20 +197,20 @@ export default function ShiftManager() {
       id: editId || undefined,
       name: name.trim(),
       type,
-      shift1_start: shift1Start,
-      shift1_end: shift1End,
-      shift2_start: type === 'dual' ? shift2Start : undefined,
-      shift2_end: type === 'dual' ? shift2End : undefined,
+      shift1_start: formatTo24Hour(shift1Start),
+      shift1_end: formatTo24Hour(shift1End),
+      shift2_start: type === 'dual' ? formatTo24Hour(shift2Start) : undefined,
+      shift2_end: type === 'dual' ? formatTo24Hour(shift2End) : undefined,
       grace_minutes: Number(graceMinutes),
       overtime_threshold_minutes: Number(overtimeThreshold),
-      checkin_start: checkinStart,
-      checkin_end: checkinEnd,
-      checkout_start: checkoutStart,
-      checkout_end: checkoutEnd,
-      checkin2_start: type === 'dual' ? checkin2Start : undefined,
-      checkin2_end: type === 'dual' ? checkin2End : undefined,
-      checkout2_start: type === 'dual' ? checkout2Start : undefined,
-      checkout2_end: type === 'dual' ? checkout2End : undefined,
+      checkin_start: formatTo24Hour(checkinStart),
+      checkin_end: formatTo24Hour(checkinEnd),
+      checkout_start: formatTo24Hour(checkoutStart),
+      checkout_end: formatTo24Hour(checkoutEnd),
+      checkin2_start: type === 'dual' ? formatTo24Hour(checkin2Start) : undefined,
+      checkin2_end: type === 'dual' ? formatTo24Hour(checkin2End) : undefined,
+      checkout2_start: type === 'dual' ? formatTo24Hour(checkout2Start) : undefined,
+      checkout2_end: type === 'dual' ? formatTo24Hour(checkout2End) : undefined,
     };
 
     const { error: err } = await db.saveShift(payload);
@@ -336,28 +338,16 @@ export default function ShiftManager() {
                   {/* Shift 1 */}
                   <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl space-y-3">
                     <div className="text-xs font-bold text-emerald-400 border-b border-slate-800 pb-1.5">
-                      {type === 'dual' ? 'الشفت الأول (صباحي)' : 'الشيفت العام'}
+                      {type === 'dual' ? 'الشفت الأول (الوردية الأولى)' : 'الشيفت العام'}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="block text-[10px] text-slate-400">بداية البصمة</label>
-                        <input
-                          type="time"
-                          required
-                          value={shift1Start}
-                          onChange={(e) => setShift1Start(e.target.value)}
-                          className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                        />
+                        <TimeInput24 value={shift1Start} onChange={(v) => setShift1Start(v)} required />
                       </div>
                       <div className="space-y-1">
                         <label className="block text-[10px] text-slate-400">نهاية البصمة</label>
-                        <input
-                          type="time"
-                          required
-                          value={shift1End}
-                          onChange={(e) => setShift1End(e.target.value)}
-                          className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                        />
+                        <TimeInput24 value={shift1End} onChange={(v) => setShift1End(v)} required />
                       </div>
                     </div>
                   </div>
@@ -370,28 +360,16 @@ export default function ShiftManager() {
                       className="p-4 bg-slate-950 border border-slate-850 rounded-xl space-y-3"
                     >
                       <div className="text-xs font-bold text-emerald-400 border-b border-slate-800 pb-1.5">
-                        الشفت الثاني (مسائي)
+                        الشفت الثاني (الوردية الثانية)
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <label className="block text-[10px] text-slate-400">بداية البصمة</label>
-                          <input
-                            type="time"
-                            required
-                            value={shift2Start}
-                            onChange={(e) => setShift2Start(e.target.value)}
-                            className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                          />
+                          <TimeInput24 value={shift2Start} onChange={(v) => setShift2Start(v)} required />
                         </div>
                         <div className="space-y-1">
                           <label className="block text-[10px] text-slate-400">نهاية البصمة</label>
-                          <input
-                            type="time"
-                            required
-                            value={shift2End}
-                            onChange={(e) => setShift2End(e.target.value)}
-                            className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                          />
+                          <TimeInput24 value={shift2End} onChange={(v) => setShift2End(v)} required />
                         </div>
                       </div>
                     </motion.div>
@@ -461,7 +439,7 @@ export default function ShiftManager() {
                   <div className="space-y-3">
                     {type === 'dual' && (
                       <div className="text-xs font-bold text-slate-300 border-r-2 border-emerald-500 pr-2">
-                        الشفت الأول (صباحي)
+                        الشفت الأول (الوردية الأولى)
                       </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -475,23 +453,11 @@ export default function ShiftManager() {
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <label className="block text-[10px] text-slate-400">بداية قبول الحضور</label>
-                            <input
-                              type="time"
-                              required
-                              value={checkinStart}
-                              onChange={(e) => setCheckinStart(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                            />
+                            <TimeInput24 value={checkinStart} onChange={(v) => setCheckinStart(v)} required />
                           </div>
                           <div className="space-y-1">
                             <label className="block text-[10px] text-slate-400">نهاية قبول الحضور</label>
-                            <input
-                              type="time"
-                              required
-                              value={checkinEnd}
-                              onChange={(e) => setCheckinEnd(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                            />
+                            <TimeInput24 value={checkinEnd} onChange={(v) => setCheckinEnd(v)} required />
                           </div>
                         </div>
                         <span className="block text-[9px] text-slate-500 leading-normal">
@@ -509,23 +475,11 @@ export default function ShiftManager() {
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <label className="block text-[10px] text-slate-400">بداية قبول الانصراف</label>
-                            <input
-                              type="time"
-                              required
-                              value={checkoutStart}
-                              onChange={(e) => setCheckoutStart(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-rose-500 text-center font-mono"
-                            />
+                            <TimeInput24 value={checkoutStart} onChange={(v) => setCheckoutStart(v)} focusColor="rose" required />
                           </div>
                           <div className="space-y-1">
                             <label className="block text-[10px] text-slate-400">نهاية قبول الانصراف</label>
-                            <input
-                              type="time"
-                              required
-                              value={checkoutEnd}
-                              onChange={(e) => setCheckoutEnd(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-rose-500 text-center font-mono"
-                            />
+                            <TimeInput24 value={checkoutEnd} onChange={(v) => setCheckoutEnd(v)} focusColor="rose" required />
                           </div>
                         </div>
                         <span className="block text-[9px] text-slate-500 leading-normal">
@@ -543,7 +497,7 @@ export default function ShiftManager() {
                       className="space-y-3 pt-2"
                     >
                       <div className="text-xs font-bold text-slate-300 border-r-2 border-amber-500 pr-2">
-                        الشفت الثاني (مسائي)
+                        الشفت الثاني (الوردية الثانية)
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Check-In Window Card Shift 2 */}
@@ -556,23 +510,11 @@ export default function ShiftManager() {
                           <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <label className="block text-[10px] text-slate-400">بداية قبول الحضور</label>
-                              <input
-                                type="time"
-                                required={type === 'dual'}
-                                value={checkin2Start}
-                                onChange={(e) => setCheckin2Start(e.target.value)}
-                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                              />
+                              <TimeInput24 value={checkin2Start} onChange={(v) => setCheckin2Start(v)} required={type === 'dual'} />
                             </div>
                             <div className="space-y-1">
                               <label className="block text-[10px] text-slate-400">نهاية قبول الحضور</label>
-                              <input
-                                type="time"
-                                required={type === 'dual'}
-                                value={checkin2End}
-                                onChange={(e) => setCheckin2End(e.target.value)}
-                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-emerald-500 text-center font-mono"
-                              />
+                              <TimeInput24 value={checkin2End} onChange={(v) => setCheckin2End(v)} required={type === 'dual'} />
                             </div>
                           </div>
                           <span className="block text-[9px] text-slate-500 leading-normal">
@@ -590,23 +532,11 @@ export default function ShiftManager() {
                           <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <label className="block text-[10px] text-slate-400">بداية قبول الانصراف</label>
-                              <input
-                                type="time"
-                                required={type === 'dual'}
-                                value={checkout2Start}
-                                onChange={(e) => setCheckout2Start(e.target.value)}
-                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-rose-500 text-center font-mono"
-                              />
+                              <TimeInput24 value={checkout2Start} onChange={(v) => setCheckout2Start(v)} focusColor="rose" required={type === 'dual'} />
                             </div>
                             <div className="space-y-1">
                               <label className="block text-[10px] text-slate-400">نهاية قبول الانصراف</label>
-                              <input
-                                type="time"
-                                required={type === 'dual'}
-                                value={checkout2End}
-                                onChange={(e) => setCheckout2End(e.target.value)}
-                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-rose-500 text-center font-mono"
-                              />
+                              <TimeInput24 value={checkout2End} onChange={(v) => setCheckout2End(v)} focusColor="rose" required={type === 'dual'} />
                             </div>
                           </div>
                           <span className="block text-[9px] text-slate-500 leading-normal">
@@ -697,10 +627,10 @@ export default function ShiftManager() {
                   <div className="grid grid-cols-2 gap-2 mt-4 text-xs font-mono">
                     <div className="p-2.5 bg-slate-900/60 rounded-lg border border-slate-900">
                       <div className="text-[9px] text-slate-500 text-right mb-1">
-                        {shift.type === 'dual' ? 'الشفت الصباحي' : 'فترة الدوام'}
+                        {shift.type === 'dual' ? 'الشفت الأول' : 'فترة الدوام'}
                       </div>
                       <div className="text-slate-200 text-center text-xs tracking-wider">
-                        {shift.shift1_start} - {shift.shift1_end}
+                        {formatTo24Hour(shift.shift1_start)} - {formatTo24Hour(shift.shift1_end)}
                       </div>
                     </div>
 
@@ -708,7 +638,7 @@ export default function ShiftManager() {
                       <div className="p-2.5 bg-slate-900/60 rounded-lg border border-slate-900">
                         <div className="text-[9px] text-slate-500 text-right mb-1">الشفت المسائي</div>
                         <div className="text-slate-200 text-center text-xs tracking-wider">
-                          {shift.shift2_start} - {shift.shift2_end}
+                          {formatTo24Hour(shift.shift2_start)} - {formatTo24Hour(shift.shift2_end)}
                         </div>
                       </div>
                     ) : (
@@ -733,13 +663,13 @@ export default function ShiftManager() {
                         <div>
                           <span className="text-slate-500">الحضور:</span>{' '}
                           <span className="text-emerald-400 font-mono">
-                            {shift.checkin_start || addMinutesToTimeStr(shift.shift1_start, -120)} - {shift.checkin_end || addMinutesToTimeStr(shift.shift1_start, 180)}
+                            {formatTo24Hour(shift.checkin_start || addMinutesToTimeStr(shift.shift1_start, -120))} - {formatTo24Hour(shift.checkin_end || addMinutesToTimeStr(shift.shift1_start, 180))}
                           </span>
                         </div>
                         <div>
                           <span className="text-slate-500">الانصراف:</span>{' '}
                           <span className="text-rose-400 font-mono">
-                            {shift.checkout_start || addMinutesToTimeStr(shift.shift1_end, -120)} - {shift.checkout_end || addMinutesToTimeStr(shift.shift1_end, 240)}
+                            {formatTo24Hour(shift.checkout_start || addMinutesToTimeStr(shift.shift1_end, -120))} - {formatTo24Hour(shift.checkout_end || addMinutesToTimeStr(shift.shift1_end, 240))}
                           </span>
                         </div>
                       </div>
@@ -752,13 +682,13 @@ export default function ShiftManager() {
                           <div>
                             <span className="text-slate-500">الحضور:</span>{' '}
                             <span className="text-emerald-400 font-mono">
-                              {shift.checkin2_start || addMinutesToTimeStr(shift.shift2_start || '17:00', -120)} - {shift.checkin2_end || addMinutesToTimeStr(shift.shift2_start || '17:00', 180)}
+                              {formatTo24Hour(shift.checkin2_start || addMinutesToTimeStr(shift.shift2_start || '17:00', -120))} - {formatTo24Hour(shift.checkin2_end || addMinutesToTimeStr(shift.shift2_start || '17:00', 180))}
                             </span>
                           </div>
                           <div>
                             <span className="text-slate-500">الانصراف:</span>{' '}
                             <span className="text-rose-400 font-mono">
-                              {shift.checkout2_start || addMinutesToTimeStr(shift.shift2_end || '21:00', -120)} - {shift.checkout2_end || addMinutesToTimeStr(shift.shift2_end || '21:00', 240)}
+                              {formatTo24Hour(shift.checkout2_start || addMinutesToTimeStr(shift.shift2_end || '21:00', -120))} - {formatTo24Hour(shift.checkout2_end || addMinutesToTimeStr(shift.shift2_end || '21:00', 240))}
                             </span>
                           </div>
                         </div>

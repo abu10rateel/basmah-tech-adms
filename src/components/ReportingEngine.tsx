@@ -15,7 +15,8 @@ import {
   formatMinutesArabic,
   formatHoursToHHMM,
   formatMinutesToHHMM,
-  formatSignedMinutesToHHMM
+  formatSignedMinutesToHHMM,
+  formatTo24Hour
 } from '../utils/calc';
 import { Calendar, Users, Printer, BarChart3, Clock, AlertTriangle, FileText, CheckCircle, Info, Download, Fingerprint, Phone } from 'lucide-react';
 
@@ -615,7 +616,7 @@ export default function ReportingEngine() {
                   <div className="text-right">
                     <span className="text-slate-500">الوردية المسندة: </span>
                     <span className="text-emerald-400 font-bold">
-                      {schedule?.name || 'الوردية القياسية'} ({schedule?.shift1_start || '08:00'} - {schedule?.shift1_end || '16:00'})
+                      {schedule?.name || 'الوردية القياسية'} ({formatTo24Hour(schedule?.shift1_start || '08:00')} - {formatTo24Hour(schedule?.shift1_end || '16:00')})
                     </span>
                   </div>
                   <div className="text-right">
@@ -673,18 +674,18 @@ export default function ReportingEngine() {
                                   )}
                                 </td>
                                 <td className="px-3 py-1.5 text-center font-mono text-[11px] text-emerald-400 font-bold">
-                                  {rawLog?.shift1_check_in || '—'}
+                                  {formatTo24Hour(rawLog?.shift1_check_in)}
                                 </td>
                                 <td className="px-3 py-1.5 text-center font-mono text-[11px] text-amber-400 font-bold">
-                                  {rawLog?.shift1_check_out || '—'}
+                                  {formatTo24Hour(rawLog?.shift1_check_out)}
                                 </td>
                                 {employee.is_dual_shift && (
                                   <>
                                     <td className="px-3 py-1.5 text-center font-mono text-[11px] text-emerald-400 font-bold">
-                                      {rawLog?.shift2_check_in || '—'}
+                                      {formatTo24Hour(rawLog?.shift2_check_in)}
                                     </td>
                                     <td className="px-3 py-1.5 text-center font-mono text-[11px] text-amber-400 font-bold">
-                                      {rawLog?.shift2_check_out || '—'}
+                                      {formatTo24Hour(rawLog?.shift2_check_out)}
                                     </td>
                                   </>
                                 )}

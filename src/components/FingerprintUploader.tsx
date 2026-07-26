@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { db } from '../supabaseClient';
 import { Employee, ShiftSchedule, AttendanceLog } from '../types';
-import { timeToMinutes, pairPunchesByWindows, addMinutesToTimeStr } from '../utils/calc';
+import { timeToMinutes, pairPunchesByWindows, addMinutesToTimeStr, formatTo24Hour } from '../utils/calc';
 
 const ARABIC_MONTHS = [
   { value: 1, label: 'يناير (01)' },
@@ -1087,16 +1087,16 @@ export default function FingerprintUploader({
                               </td>
                               <td className="p-3 font-mono text-slate-300">{log.date}</td>
                               <td className="p-3 text-center font-mono text-[11px] font-bold text-emerald-400">
-                                {log.shift1_check_in || '—'}
+                                {formatTo24Hour(log.shift1_check_in)}
                               </td>
                               <td className="p-3 text-center font-mono text-[11px] font-bold text-amber-400">
-                                {log.shift1_check_out || '—'}
+                                {formatTo24Hour(log.shift1_check_out)}
                               </td>
                               <td className="p-3 text-center font-mono text-[11px] font-bold text-emerald-400">
-                                {log.matchedEmployee?.is_dual_shift ? (log.shift2_check_in || '—') : '—'}
+                                {log.matchedEmployee?.is_dual_shift ? formatTo24Hour(log.shift2_check_in) : '—'}
                               </td>
                               <td className="p-3 text-center font-mono text-[11px] font-bold text-amber-400">
-                                {log.matchedEmployee?.is_dual_shift ? (log.shift2_check_out || '—') : '—'}
+                                {log.matchedEmployee?.is_dual_shift ? formatTo24Hour(log.shift2_check_out) : '—'}
                               </td>
                               <td className="p-3 font-mono text-[10px] text-slate-400 max-w-[120px] truncate">
                                 {log.punches.join(', ')}
@@ -1352,9 +1352,9 @@ export default function FingerprintUploader({
                                                  d.getMonth() === now.getMonth() &&
                                                  d.getFullYear() === now.getFullYear();
                                  if (isToday) {
-                                   return `اليوم الساعة ${d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+                                   return `اليوم الساعة ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`;
                                  }
-                                 return d.toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'medium' });
+                                 return d.toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'medium', hour12: false });
                                };
 
                                return (

@@ -1614,7 +1614,7 @@ async function startServer() {
         if (logRecord.shift2_check_out) combinedTimesSet.add(logRecord.shift2_check_out);
         sortedTimes.forEach(t => combinedTimesSet.add(t));
 
-        const empSchedules = await firebaseDb.getSchedules(userId);
+        const empSchedules = await firebaseDb.getShifts(userId);
         const schedule = empSchedules.find((s: any) => s.id === employee.shift_schedule_id) || empSchedules[0];
 
         const s1Start = schedule?.shift1_start || '08:00';
