@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { db } from '../supabaseClient';
 import { Employee, ShiftSchedule, AttendanceLog } from '../types';
-import { timeToMinutes } from '../utils/calc';
+import { timeToMinutes, pairPunchesByWindows, addMinutesToTimeStr } from '../utils/calc';
 
 const ARABIC_MONTHS = [
   { value: 1, label: 'يناير (01)' },
@@ -519,42 +519,37 @@ export default function FingerprintUploader({
         return;
       }
 
-      const shift_in = schedule.shift1_start;
-      const shift_out = schedule.shift1_end;
-      const shift_in_min = timeToMinutes(shift_in);
-      const shift_out_min = timeToMinutes(shift_out);
+      const sStart = timeToMinutes(schedule.shift1_start);
+      const rawEnd = timeToMinutes(schedule.shift1_end);
+      const isOvernight = rawEnd <= sStart;
 
-      const isOvernightShift = shift_out_min < shift_in_min || (schedule.checkout_end && timeToMinutes(schedule.checkout_end) < shift_in_min);
+      if (isOvernight) {
+        const defaultCiStart = addMinutesToTimeStr(schedule.shift1_start, -120);
+        const defaultCoStart = addMinutesToTimeStr(schedule.shift1_end, -120);
+        const defaultCoEnd = addMinutesToTimeStr(schedule.shift1_end, 240);
 
-      const checkin_start = schedule.checkin_start || addMinutesToTimeStr(shift_in, -120);
-      const checkout_start = schedule.checkout_start || addMinutesToTimeStr(shift_out, -120);
-      const checkout_end = schedule.checkout_end || addMinutesToTimeStr(shift_out, 240);
+        const ciStartRaw = timeToMinutes(schedule.checkin_start || defaultCiStart);
+        const ciStartMin = ciStartRaw < sStart - 360 ? ciStartRaw + 1440 : ciStartRaw;
 
-      const checkin_start_min = timeToMinutes(checkin_start);
-      
-      const adjustTime = (min: number) => {
-        return min < checkin_start_min ? min + 1440 : min;
-      };
+        const coStartRaw = timeToMinutes(schedule.checkout_start || defaultCoStart);
+        const coStartMin = coStartRaw < ciStartMin ? coStartRaw + 1440 : coStartRaw;
 
-      const checkout_start_min = adjustTime(timeToMinutes(checkout_start));
-      const checkout_end_min = adjustTime(timeToMinutes(checkout_end));
+        const coEndRaw = timeToMinutes(schedule.checkout_end || defaultCoEnd);
+        const coEndMin = coEndRaw < coStartMin ? coEndRaw + 1440 : coEndRaw;
 
-      // Calculate relative punch time for YESTERDAY
-      const punchDateObj = p.dateTimeObj;
-      const yesterdayDateObj = new Date(punchDateObj.getTime() - 24 * 60 * 60 * 1000);
-      const yesterdayStr = `${yesterdayDateObj.getFullYear()}-${String(yesterdayDateObj.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDateObj.getDate()).padStart(2, '0')}`;
+        const punchDateObj = p.dateTimeObj;
+        const yesterdayDateObj = new Date(punchDateObj.getTime() - 24 * 60 * 60 * 1000);
+        const yesterdayStr = `${yesterdayDateObj.getFullYear()}-${String(yesterdayDateObj.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDateObj.getDate()).padStart(2, '0')}`;
 
-      const punchTimeMin = timeToMinutes(p.time);
-      const relMinToYesterday = 1440 + punchTimeMin;
+        const relMinToYesterday = 1440 + timeToMinutes(p.time);
 
-      // Check if this punch belongs to YESTERDAY's overnight shift check-out
-      const isYesterdayCheckout = isOvernightShift && (relMinToYesterday >= checkout_start_min - 120 && relMinToYesterday <= checkout_end_min + 120);
-
-      if (isYesterdayCheckout) {
-        mappedPunches.push({ punch: p, operationalDate: yesterdayStr });
-      } else {
-        mappedPunches.push({ punch: p, operationalDate: p.date });
+        if (relMinToYesterday >= coStartMin && relMinToYesterday <= coEndMin) {
+          mappedPunches.push({ punch: p, operationalDate: yesterdayStr });
+          return;
+        }
       }
+
+      mappedPunches.push({ punch: p, operationalDate: p.date });
     });
 
     // 2. Group punches by Employee and Operational Date
@@ -584,91 +579,36 @@ export default function FingerprintUploader({
 
       if (!matchedEmp) {
         warning = 'الرقم الوظيفي غير مسجل بالنظام';
-        shift1_check_in = uniqueTimes[0] || null;
-        if (uniqueTimes.length > 1) {
-          shift1_check_out = uniqueTimes[uniqueTimes.length - 1] || null;
+        const schedule = shifts[0];
+        if (schedule) {
+          const paired = pairPunchesByWindows(
+            date,
+            schedule,
+            sortedItems.map(item => ({
+              time: item.punch.time,
+              date: item.punch.date,
+              dateTimeObj: item.punch.dateTimeObj
+            }))
+          );
+          shift1_check_in = paired.shift1_check_in;
+          shift1_check_out = paired.shift1_check_out;
         }
       } else {
         const schedule = shifts.find(s => s.id === matchedEmp.shift_schedule_id) || shifts[0];
-        if (!schedule) {
-          shift1_check_in = uniqueTimes[0] || null;
-          if (uniqueTimes.length > 1) {
-            shift1_check_out = uniqueTimes[uniqueTimes.length - 1] || null;
-          }
-        } else {
-          const shift_in = schedule.shift1_start;
-          const shift_out = schedule.shift1_end;
-          
-          const checkin_start = schedule.checkin_start || addMinutesToTimeStr(shift_in, -120);
-          const checkin_end = schedule.checkin_end || addMinutesToTimeStr(shift_in, 180);
-          
-          const checkout_start = schedule.checkout_start || checkin_end;
-          const checkout_end = schedule.checkout_end || addMinutesToTimeStr(shift_out, 240);
-
-          const isDual = matchedEmp.is_dual_shift && schedule.type === 'dual';
-
-          if (isDual && schedule.shift2_start && schedule.shift2_end) {
-            // Dual shift processing
-            const s1_checkin_start_min = timeToMinutes(addMinutesToTimeStr(schedule.shift1_start, -120));
-            const s1_checkin_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift1_start, 120));
-            const s1_checkout_start_min = s1_checkin_end_min;
-            const s1_checkout_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift1_end, 180));
-
-            const s2_checkin_start_min = timeToMinutes(addMinutesToTimeStr(schedule.shift2_start, -120));
-            const s2_checkin_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift2_start, 120));
-            const s2_checkout_start_min = s2_checkin_end_min;
-            const s2_checkout_end_min = timeToMinutes(addMinutesToTimeStr(schedule.shift2_end, 180));
-
-            const s1_checkins: number[] = [];
-            const s1_checkouts: number[] = [];
-            const s2_checkins: number[] = [];
-            const s2_checkouts: number[] = [];
-
-            sortedItems.forEach((item) => {
-              const relMin = timeToMinutes(item.punch.time);
-              if (relMin >= s1_checkin_start_min && relMin <= s1_checkin_end_min) s1_checkins.push(relMin);
-              else if (relMin >= s1_checkout_start_min && relMin <= s1_checkout_end_min) s1_checkouts.push(relMin);
-              else if (relMin >= s2_checkin_start_min && relMin <= s2_checkin_end_min) s2_checkins.push(relMin);
-              else if (relMin >= s2_checkout_start_min && relMin <= s2_checkout_end_min) s2_checkouts.push(relMin);
-            });
-
-            if (s1_checkins.length > 0) shift1_check_in = addMinutesToTimeStr('00:00', Math.min(...s1_checkins));
-            if (s1_checkouts.length > 0) shift1_check_out = addMinutesToTimeStr('00:00', Math.max(...s1_checkouts));
-            if (s2_checkins.length > 0) shift2_check_in = addMinutesToTimeStr('00:00', Math.min(...s2_checkins));
-            if (s2_checkouts.length > 0) shift2_check_out = addMinutesToTimeStr('00:00', Math.max(...s2_checkouts));
-          } else {
-            // Single & Overnight shift processing
-            const shiftInMin = timeToMinutes(shift_in);
-            let shiftOutMin = timeToMinutes(shift_out);
-            if (shiftOutMin <= shiftInMin) shiftOutMin += 1440;
-
-            const getRelMin = (tStr: string) => {
-              let m = timeToMinutes(tStr);
-              if (shiftOutMin > 1440 && m < shiftInMin - 360) {
-                m += 1440;
-              }
-              return m;
-            };
-
-            const timelineSorted = [...uniqueTimes].sort((a, b) => getRelMin(a) - getRelMin(b));
-
-            if (timelineSorted.length === 1) {
-              const relM = getRelMin(timelineSorted[0]);
-              const distToIn = Math.abs(relM - shiftInMin);
-              const distToOut = Math.abs(relM - shiftOutMin);
-
-              if (distToIn <= distToOut) {
-                shift1_check_in = timelineSorted[0];
-                shift1_check_out = null;
-              } else {
-                shift1_check_in = null;
-                shift1_check_out = timelineSorted[0];
-              }
-            } else if (timelineSorted.length >= 2) {
-              shift1_check_in = timelineSorted[0];
-              shift1_check_out = timelineSorted[timelineSorted.length - 1];
-            }
-          }
+        if (schedule) {
+          const paired = pairPunchesByWindows(
+            date,
+            schedule,
+            sortedItems.map(item => ({
+              time: item.punch.time,
+              date: item.punch.date,
+              dateTimeObj: item.punch.dateTimeObj
+            }))
+          );
+          shift1_check_in = paired.shift1_check_in;
+          shift1_check_out = paired.shift1_check_out;
+          shift2_check_in = paired.shift2_check_in;
+          shift2_check_out = paired.shift2_check_out;
         }
       }
 
