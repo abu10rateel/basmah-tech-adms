@@ -1545,16 +1545,26 @@ async function startServer() {
         return res.status(401).json({ error: 'غير مصرح بالدخول' });
       }
 
-      const { log_ids } = req.body;
-      if (!Array.isArray(log_ids)) {
-        return res.status(400).json({ error: { message: 'بيانات غير مكتملة.' } });
-      }
+      const { log_ids, startDate, endDate, reSync } = req.body;
 
       const tenantDevices = await firebaseDb.getDevices(userId);
       const tenantSNs = tenantDevices.map((d: any) => d.serial_number.toUpperCase());
 
       const rawLogs = await firebaseDb.getRawLogsBySerialNumbers(tenantSNs);
-      const targetLogs = rawLogs.filter((l: any) => log_ids.includes(l.id) && !l.synced);
+      
+      let targetLogs: any[] = [];
+      if (startDate || endDate) {
+        targetLogs = rawLogs.filter((l: any) => {
+          const logDate = l.timestamp ? l.timestamp.split(' ')[0] : (l.created_at ? l.created_at.split('T')[0] : '');
+          if (startDate && logDate < startDate) return false;
+          if (endDate && logDate > endDate) return false;
+          return reSync ? true : !l.synced;
+        });
+      } else if (Array.isArray(log_ids) && log_ids.length > 0) {
+        targetLogs = rawLogs.filter((l: any) => log_ids.includes(l.id) && (reSync ? true : !l.synced));
+      } else {
+        targetLogs = rawLogs.filter((l: any) => (reSync ? true : !l.synced));
+      }
 
       if (targetLogs.length === 0) {
         return res.json({ success: true, count: 0 });
@@ -1562,13 +1572,6 @@ async function startServer() {
 
       const tenantEmployees = await firebaseDb.getEmployees(userId);
       const grouping: Record<string, { employee: any; date: string; times: string[] }> = {};
-
-      // Punches before this hour are treated as belonging to the PREVIOUS operational
-      // day (e.g. a 04:00 check-out that closes a shift started the night before).
-      // Without this, punches after midnight get grouped under a brand-new calendar
-      // date and get cut off from the rest of that day's punches (dual-shift / night
-      // shift employees end up missing their check-out entirely).
-      const OPERATIONAL_DAY_CUTOFF_HOUR = 6;
 
       targetLogs.forEach((l: any) => {
         const emp = tenantEmployees.find(
@@ -1579,29 +1582,30 @@ async function startServer() {
         const [datePart, timePart] = l.timestamp.split(' ');
         if (!datePart || !timePart) return;
 
-        const [h, m] = timePart.split(':');
-        const cleanTime = `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
-
-        const hourNum = parseInt(h, 10);
-        let operationalDate = datePart;
-        if (!isNaN(hourNum) && hourNum < OPERATIONAL_DAY_CUTOFF_HOUR) {
-          const [y, mo, d] = datePart.split('-').map(Number);
-          const dateObj = new Date(y, (mo || 1) - 1, d || 1);
-          dateObj.setDate(dateObj.getDate() - 1);
-          const py = dateObj.getFullYear();
-          const pm = String(dateObj.getMonth() + 1).padStart(2, '0');
-          const pd = String(dateObj.getDate()).padStart(2, '0');
-          operationalDate = `${py}-${pm}-${pd}`;
+        // Calculate operational date: if punch time is before 06:00 AM, count as previous working day
+        let opDate = datePart;
+        const [hStr] = timePart.split(':');
+        const hour = parseInt(hStr, 10);
+        if (!isNaN(hour) && hour < 6) {
+          const [y, m, d] = datePart.split('-').map(Number);
+          const dt = new Date(Date.UTC(y, m - 1, d));
+          dt.setUTCDate(dt.getUTCDate() - 1);
+          const py = dt.getUTCFullYear();
+          const pm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+          const pd = String(dt.getUTCDate()).padStart(2, '0');
+          opDate = `${py}-${pm}-${pd}`;
         }
 
-        const key = `${emp.id}_${operationalDate}`;
+        const key = `${emp.id}_${opDate}`;
         if (!grouping[key]) {
           grouping[key] = {
             employee: emp,
-            date: operationalDate,
+            date: opDate,
             times: []
           };
         }
+        const [h, m] = timePart.split(':');
+        const cleanTime = `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
         grouping[key].times.push(cleanTime);
       });
 
@@ -1624,21 +1628,29 @@ async function startServer() {
             shift2_check_out: null,
             notes: 'مزامنة جهاز البصمة أونلاين'
           };
+        } else if (reSync) {
+          // Reset existing shift times for clean re-pairing
+          logRecord.shift1_check_in = null;
+          logRecord.shift1_check_out = null;
+          logRecord.shift2_check_in = null;
+          logRecord.shift2_check_out = null;
         }
 
         const isDual = employee.is_dual_shift;
         const combinedTimesSet = new Set<string>();
-        if (logRecord.shift1_check_in) combinedTimesSet.add(logRecord.shift1_check_in);
-        if (logRecord.shift1_check_out) combinedTimesSet.add(logRecord.shift1_check_out);
-        if (logRecord.shift2_check_in) combinedTimesSet.add(logRecord.shift2_check_in);
-        if (logRecord.shift2_check_out) combinedTimesSet.add(logRecord.shift2_check_out);
+        if (!reSync) {
+          if (logRecord.shift1_check_in) combinedTimesSet.add(logRecord.shift1_check_in);
+          if (logRecord.shift1_check_out) combinedTimesSet.add(logRecord.shift1_check_out);
+          if (logRecord.shift2_check_in) combinedTimesSet.add(logRecord.shift2_check_in);
+          if (logRecord.shift2_check_out) combinedTimesSet.add(logRecord.shift2_check_out);
+        }
         sortedTimes.forEach(t => combinedTimesSet.add(t));
 
         const empSchedules = await firebaseDb.getShifts(userId);
         const schedule = empSchedules.find((s: any) => s.id === employee.shift_schedule_id) || empSchedules[0];
 
         const s1Start = schedule?.shift1_start || '08:00';
-        const s1StartMin = (s1Start.split(':').map(Number)[0] * 60) + s1Start.split(':').map(Number)[1];
+        const s1StartMin = (s1Start.split(':').map(Number)[0] * 60) + (s1Start.split(':').map(Number)[1] || 0);
 
         const timeToRelMin = (t: string) => {
           const parts = t.split(':').map(Number);
@@ -1669,7 +1681,7 @@ async function startServer() {
           }
         }
 
-        logRecord.notes = 'تم سحب البصمة أونلاين من السحابة بنجاح';
+        logRecord.notes = 'تم سحب ومزامنة البصمة أونلاين بنجاح';
 
         await firebaseDb.saveAttendanceLog(logRecord);
         countMerged++;

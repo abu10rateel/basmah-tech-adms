@@ -235,8 +235,6 @@ export function pairPunchesByWindows(
   // Candidates for Shift 1 Check-Out (strictly inside w1.coStartMin .. w1.coEndMin)
   const s1Co = parsedPunches.filter((p) => p.relMin >= w1.coStartMin && p.relMin <= w1.coEndMin);
 
-  // Track relMin alongside the selected punch value (not just the time string)
-  // to avoid mismatches when two different punches share the same HH:MM text.
   let s1InRelMin: number | null = null;
   let s1OutRelMin: number | null = null;
 
@@ -265,14 +263,16 @@ export function pairPunchesByWindows(
     }
   }
 
-  // Ensure shift1_check_in is chronologically BEFORE or equal to shift1_check_out.
-  // Compare using the numeric relMin values captured above (not a text re-lookup),
-  // so identical HH:MM strings on different days can never be mismatched.
+  // Ensure shift1_check_in is chronologically BEFORE or equal to shift1_check_out using exact relMin
   if (result.shift1_check_in && result.shift1_check_out && s1InRelMin !== null && s1OutRelMin !== null) {
     if (s1InRelMin > s1OutRelMin) {
-      const temp = result.shift1_check_in;
+      const tempTime = result.shift1_check_in;
       result.shift1_check_in = result.shift1_check_out;
-      result.shift1_check_out = temp;
+      result.shift1_check_out = tempTime;
+
+      const tempRel = s1InRelMin;
+      s1InRelMin = s1OutRelMin;
+      s1OutRelMin = tempRel;
     }
   }
 
@@ -305,11 +305,16 @@ export function pairPunchesByWindows(
       s2OutRelMin = s2Co[s2Co.length - 1].relMin;
     }
 
+    // Ensure shift2_check_in is chronologically BEFORE or equal to shift2_check_out using exact relMin
     if (result.shift2_check_in && result.shift2_check_out && s2InRelMin !== null && s2OutRelMin !== null) {
       if (s2InRelMin > s2OutRelMin) {
-        const temp2 = result.shift2_check_in;
+        const tempTime2 = result.shift2_check_in;
         result.shift2_check_in = result.shift2_check_out;
-        result.shift2_check_out = temp2;
+        result.shift2_check_out = tempTime2;
+
+        const tempRel2 = s2InRelMin;
+        s2InRelMin = s2OutRelMin;
+        s2OutRelMin = tempRel2;
       }
     }
   }

@@ -647,7 +647,10 @@ export const db = {
     }
   },
 
-  async syncZkLogs(logIds: string[]): Promise<{ success: boolean; count: number; error?: any }> {
+  async syncZkLogs(
+    logIds?: string[],
+    options?: { startDate?: string; endDate?: string; reSync?: boolean }
+  ): Promise<{ success: boolean; count: number; error?: any }> {
     const user = await this.getCurrentUser();
     if (!user) return { success: false, count: 0, error: 'غير مصرح بالدخول' };
     try {
@@ -657,7 +660,12 @@ export const db = {
           'Content-Type': 'application/json',
           'x-user-id': user.id
         },
-        body: JSON.stringify({ log_ids: logIds })
+        body: JSON.stringify({
+          log_ids: logIds || [],
+          startDate: options?.startDate,
+          endDate: options?.endDate,
+          reSync: options?.reSync
+        })
       });
       const result = await response.json();
       if (!response.ok) {

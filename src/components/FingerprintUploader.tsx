@@ -765,6 +765,27 @@ export default function FingerprintUploader({
     }
   };
 
+  const handleReSyncDateRange = async () => {
+    setSyncingOnlineLogs(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      // @ts-ignore
+      const result = await db.syncZkLogs([], { startDate: fromDate, endDate: toDate, reSync: true });
+      if (result.success) {
+        setSuccess(`تم إعادة مزامنة وتطابق عدد ${result.count} يومية حضور وانصراف للموظفين للفترة (${fromDate} إلى ${toDate}) حسب اليوم التشغيلي وقواعد الشفتات المعدلة بنجاح!`);
+        await loadZkData();
+        onUploadSuccess();
+      } else {
+        setError(result.error?.message || 'فشل إعادة مزامنة البصمات.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'خطأ في الاتصال بالخادم.');
+    } finally {
+      setSyncingOnlineLogs(false);
+    }
+  };
+
   return (
     <div id="fingerprint-uploader-modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full p-6 text-right flex flex-col max-h-[90vh] shadow-2xl">
@@ -1518,23 +1539,35 @@ export default function FingerprintUploader({
                           </p>
                         </div>
 
-                        <button
-                          onClick={handleSyncPushedLogs}
-                          disabled={zkRawLogs.length === 0 || syncingOnlineLogs}
-                          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 text-slate-950 disabled:text-slate-500 font-extrabold rounded-xl text-xs transition flex items-center gap-2 cursor-pointer shadow shadow-emerald-500/10 font-sans"
-                        >
-                          {syncingOnlineLogs ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              <span>جاري ترحيل البصمات...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Wifi className="w-4 h-4 animate-pulse" />
-                              <span>ترحيل البصمات لجدول الحضور ({zkRawLogs.length})</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={handleSyncPushedLogs}
+                            disabled={zkRawLogs.length === 0 || syncingOnlineLogs}
+                            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 text-slate-950 disabled:text-slate-500 font-extrabold rounded-xl text-xs transition flex items-center gap-2 cursor-pointer shadow shadow-emerald-500/10 font-sans"
+                          >
+                            {syncingOnlineLogs ? (
+                              <>
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                <span>جاري ترحيل البصمات...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Wifi className="w-4 h-4 animate-pulse" />
+                                <span>ترحيل المعلقة ({zkRawLogs.length})</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            onClick={handleReSyncDateRange}
+                            disabled={syncingOnlineLogs}
+                            className="px-4 py-2.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 font-bold rounded-xl text-xs transition flex items-center gap-2 cursor-pointer font-sans"
+                            title="إعادة معالجة ومزامنة بصمات الفترة الزمنية المحددة بالكامل طبقاً لليوم التشغيلي والقواعد الجديدة"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${syncingOnlineLogs ? 'animate-spin' : ''}`} />
+                            <span>إعادة مزامنة الفترة المحددة</span>
+                          </button>
+                        </div>
                       </div>
 
                       {zkRawLogs.length === 0 ? (
