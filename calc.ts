@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+:root {
+  font-size: 100%; /* Respect user font size preferences in system/browser settings */
+}
+
+/* Fluid responsive base typography & adaptive viewport scaling */
+html {
+  font-size: clamp(14px, 0.85vw + 10px, 16px);
+  -webkit-text-size-adjust: 100%;
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
+  width: 100vw;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+}
+
+body {
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
+  width: 100vw;
+  max-width: 100vw;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  text-rendering: optimizeLegibility;
+  background-color: #020617;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Re-enable text selection inside inputs, textareas, and content areas */
+input, textarea, select, [contenteditable="true"], .selectable-text {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+#root {
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Flexible icon and image scaling */
+svg.lucide, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Custom modern scrollbars with emerald track accents for dark mode */
+::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+::-webkit-scrollbar-track {
+  background: #020617; /* bg-slate-950 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b; /* bg-slate-800 */
+  border-radius: 0.25rem;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #10b981; /* emerald-500 */
+}
+
+/* Ensure smooth touch gesture movement on mobile */
+.overflow-x-auto, .overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide scrollbar for clean adaptive tab navigation on mobile devices */
+.scrollbar-none::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.scrollbar-none,
+.no-scrollbar {
+  -ms-overflow-style: none !important;  /* IE and Edge */
+  scrollbar-width: none !important;  /* Firefox */
+}
+
+/* Fluid responsive typography utilities */
+.text-fluid-title {
+  font-size: clamp(1.125rem, 2.5vw, 1.75rem);
+  line-height: 1.25;
+}
+
+.text-fluid-subtitle {
+  font-size: clamp(0.875rem, 1.5vw, 1.125rem);
+  line-height: 1.35;
+}
+
+.text-fluid-body {
+  font-size: clamp(0.8125rem, 1.2vw, 1rem);
+  line-height: 1.5;
+}
+
