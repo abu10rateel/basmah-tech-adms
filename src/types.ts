@@ -7,6 +7,13 @@ export interface TenantProfile {
   id: string; // matches auth.uid() in Supabase
   email: string;
   company_name: string;
+  manager_name?: string;
+  phone?: string;
+  city?: string;
+  plan_type?: string;
+  employee_package?: string;
+  status?: string;
+  expiry_date?: string;
 }
 
 export interface ShiftSchedule {

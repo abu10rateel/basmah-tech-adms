@@ -41,7 +41,7 @@ export default function AuthUI({ onSuccess }: AuthUIProps) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [employeePackage, setEmployeePackage] = useState('الباقة الأساسية حتى 20 موظف - تجريبية مجانية');
+  const [employeePackage, setEmployeePackage] = useState('الباقة الأساسية (حتى 49 موظف)');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -940,9 +940,9 @@ export default function AuthUI({ onSuccess }: AuthUIProps) {
                           onChange={(e) => setEmployeePackage(e.target.value)}
                           className="w-full pl-3 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 text-xs text-right appearance-none cursor-pointer"
                         >
-                          <option value="الباقة الأساسية حتى 20 موظف - تجريبية مجانية">الباقة الأساسية حتى 20 موظف - تجريبية مجانية</option>
-                          <option value="الباقة المتقدمة حتى 100 موظف">الباقة المتقدمة حتى 100 موظف</option>
-                          <option value="باقة الشركات غير المحدودة">باقة الشركات غير المحدودة</option>
+                          <option value="الباقة الأساسية (حتى 49 موظف)">الباقة الأساسية (حتى 49 موظف)</option>
+                          <option value="الباقة المتقدمة (من 50 إلى 100 موظف)">الباقة المتقدمة (من 50 إلى 100 موظف)</option>
+                          <option value="باقة الشركات (غير محدودة - مفتوحة)">باقة الشركات (الشركات غير المحدودة - مفتوحة)</option>
                         </select>
                         <Building className="absolute top-1/2 left-3 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                       </div>

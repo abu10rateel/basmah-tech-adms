@@ -13,6 +13,18 @@ import { generateInvoicePdf, sendEmailWithAttachment, sendHtmlEmail, generatePas
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+function getPlanLimitConfig(planStr?: string) {
+  if (!planStr) return { name: 'الباقة الأساسية', rangeText: 'حتى 49 موظف', max: 49 };
+  const s = planStr.toLowerCase();
+  if (s.includes('متقدمة') || s.includes('advanced') || s.includes('100')) {
+    return { name: 'الباقة المتقدمة', rangeText: '50 - 100 موظف', max: 100 };
+  }
+  if (s.includes('شركات') || s.includes('enterprise') || s.includes('غير محدودة') || s.includes('مفتوحة')) {
+    return { name: 'باقة الشركات', rangeText: 'غير محدودة (مفتوحة)', max: Infinity };
+  }
+  return { name: 'الباقة الأساسية', rangeText: 'حتى 49 موظف', max: 49 };
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -315,8 +327,8 @@ async function startServer() {
         phone,
         password,
         address: address || '',
-        employee_package: employee_package || 'الباقة الأساسية حتى 20 موظف - تجريبية مجانية',
-        plan_type: employee_package || 'الباقة الأساسية حتى 20 موظف - تجريبية مجانية',
+        employee_package: employee_package || 'الباقة الأساسية (حتى 49 موظف)',
+        plan_type: employee_package || 'الباقة الأساسية (حتى 49 موظف)',
         status: 'pending',
         created_at: new Date().toISOString()
       };
@@ -996,6 +1008,21 @@ async function startServer() {
       const duplicate = await firebaseDb.getEmployeeByEmpId(userId, payload.emp_id);
       if (duplicate && duplicate.id !== payload.id) {
         return res.status(400).json({ error: { message: `الرقم الوظيفي (${payload.emp_id}) مستخدم بالفعل في هذه المؤسسة.` } });
+      }
+
+      // Check tenant plan employee count limit if this is a new employee
+      const currentEmployees = await firebaseDb.getEmployees(userId);
+      const isExisting = currentEmployees.some((e: any) => e.id === payload.id);
+      if (!isExisting) {
+        const tenant = await firebaseDb.getTenantById(userId);
+        const planConfig = getPlanLimitConfig(tenant?.plan_type || tenant?.employee_package);
+        if (currentEmployees.length >= planConfig.max) {
+          return res.status(400).json({
+            error: {
+              message: `عذراً، لقد وصلت للحد الأقصى المسموح به لعدد العمال في (${planConfig.name} - ${planConfig.rangeText})، الحد الحالي: ${planConfig.max} عامل. يرجى ترقية الاشتراك لإضافة المزيد من الموظفين.`
+            }
+          });
+        }
       }
 
       await firebaseDb.saveEmployee(payload);

@@ -631,9 +631,9 @@ export default function SuperAdminDashboard({ user, onSignOut }: SuperAdminDashb
                       onChange={(e) => setPlanType(e.target.value)}
                       className="w-full pl-3 pr-10 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 text-xs text-right font-sans"
                     >
-                      <option value="الأساسية">الباقة الأساسية</option>
-                      <option value="المتقدمة">الباقة المتقدمة</option>
-                      <option value="الشركات">باقة الشركات</option>
+                      <option value="الأساسية">الباقة الأساسية (حتى 49 موظف)</option>
+                      <option value="المتقدمة">الباقة المتقدمة (من 50 إلى 100 موظف)</option>
+                      <option value="الشركات">باقة الشركات (غير محدودة - مفتوحة)</option>
                     </select>
                     <Layers className="absolute top-1/2 right-3 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   </div>

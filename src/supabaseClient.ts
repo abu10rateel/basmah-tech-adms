@@ -3,18 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ShiftSchedule, Employee, AttendanceLog } from './types';
+import { ShiftSchedule, Employee, AttendanceLog, TenantProfile } from './types';
 
 // The app is now natively and permanently cloud-based via our Express full-stack backend
 export const isSupabaseConfigured = true;
 export const supabase = null;
 
 interface AuthSession {
-  user: {
-    id: string;
-    email: string;
-    company_name: string;
-  } | null;
+  user: TenantProfile | null;
 }
 
 async function fetchWithRetry(url: string, options?: RequestInit, retries = 2, delayMs = 300): Promise<Response> {

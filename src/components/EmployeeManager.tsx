@@ -7,7 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../supabaseClient';
 import { Employee, ShiftSchedule } from '../types';
-import { UserPlus, Edit2, Trash2, Check, X, Users, Save, ShieldAlert, Phone, Briefcase, Hash, Info } from 'lucide-react';
+import { UserPlus, Edit2, Trash2, Check, X, Users, Save, ShieldAlert, Phone, Briefcase, Hash, Info, Layers, AlertCircle } from 'lucide-react';
+import { getPlanInfo, validateEmployeeCountLimit } from '../utils/plans';
 
 export default function EmployeeManager() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -24,6 +25,7 @@ export default function EmployeeManager() {
   const [shiftScheduleId, setShiftScheduleId] = useState('');
   const [isDualShift, setIsDualShift] = useState(false);
 
+  const [currentUserPlan, setCurrentUserPlan] = useState<string>('الأساسية');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -37,12 +39,16 @@ export default function EmployeeManager() {
 
   const loadData = async () => {
     setLoading(true);
-    const [empData, shiftData] = await Promise.all([
+    const [empData, shiftData, user] = await Promise.all([
       db.getEmployees(),
-      db.getShifts()
+      db.getShifts(),
+      db.getCurrentUser()
     ]);
     setEmployees(empData);
     setShifts(shiftData);
+    if (user?.plan_type || user?.employee_package) {
+      setCurrentUserPlan(user.plan_type || user.employee_package);
+    }
     
     // Set default shift selection only if adding new and not yet selected
     if (shiftData.length > 0 && !shiftScheduleId) {
@@ -129,6 +135,12 @@ export default function EmployeeManager() {
       return;
     }
 
+    const validation = validateEmployeeCountLimit(employees.length, currentUserPlan, !!editId);
+    if (!validation.allowed) {
+      setError(validation.message || 'عذراً، تجاوزت الحد الأقصى للموظفين المسموح به للباقة.');
+      return;
+    }
+
     const payload: Omit<Employee, 'user_id'> & { id?: string } = {
       id: editId || undefined,
       emp_id: empId.trim(),
@@ -150,27 +162,50 @@ export default function EmployeeManager() {
     }
   };
 
+  const activePlan = getPlanInfo(currentUserPlan);
+  const planCheck = validateEmployeeCountLimit(employees.length, currentUserPlan, false);
+
   return (
     <div id="employee-manager" className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-900 p-6 rounded-2xl border border-slate-800 text-right">
-        <div className="space-y-1 text-center sm:text-right">
-          <h2 className="text-xl font-bold text-slate-100 flex items-center justify-center sm:justify-start gap-2">
-            <Users className="w-5 h-5 text-emerald-400" />
-            <span>إدارة الموظفين</span>
-          </h2>
+        <div className="space-y-2 text-center sm:text-right">
+          <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
+            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-400" />
+              <span>إدارة الموظفين</span>
+            </h2>
+
+            {/* Plan Badge */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400">
+              <Layers className="w-3.5 h-3.5" />
+              <span>{activePlan.name} ({activePlan.rangeText})</span>
+              <span className="text-slate-400 font-mono font-normal">
+                • {employees.length} / {activePlan.maxEmployees === Infinity ? '∞' : activePlan.maxEmployees} عامل
+              </span>
+            </div>
+          </div>
           <p className="text-slate-400 text-xs">
             أضف الموظفين، واربطهم بالورديات الفردية أو الثنائية، وتابع بياناتهم الأساسية بحماية RLS كاملة.
           </p>
         </div>
         {!showForm && (
-          <button
-            onClick={() => { resetForm(); setShowForm(true); }}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-2 transition duration-150 cursor-pointer shadow-lg shadow-emerald-500/5"
-          >
-            <UserPlus className="w-4 h-4 stroke-[2.5]" />
-            <span>إضافة موظف جديد</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {!planCheck.allowed ? (
+              <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-2 rounded-xl text-xs font-bold">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>وصلت للحد الأقصى للباقة ({activePlan.maxEmployees} عامل)</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => { resetForm(); setShowForm(true); }}
+                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-2 transition duration-150 cursor-pointer shadow-lg shadow-emerald-500/5"
+              >
+                <UserPlus className="w-4 h-4 stroke-[2.5]" />
+                <span>إضافة موظف جديد</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
 
