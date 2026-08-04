@@ -4,6 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { db } from '../supabaseClient';
 import { Employee, ShiftSchedule, AttendanceLog, DailyCalculationResult, CumulativeSummary } from '../types';
 import { 
@@ -25,6 +30,7 @@ export default function ReportingEngine() {
   const [shifts, setShifts] = useState<ShiftSchedule[]>([]);
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Default dates: 25th of last month to 25th of current month
   const getDefaultDates = () => {
@@ -141,8 +147,92 @@ export default function ReportingEngine() {
     loadDataAndBuildReport();
   }, [selectedEmpId, startDate, endDate]);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    if (isGeneratingPdf) return;
+
+    // Check if running inside native Capacitor environment (Android/iOS WebView)
+    const isNative = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
+
+    if (!isNative) {
+      window.print();
+      return;
+    }
+
+    // Native mobile app flow (Capacitor)
+    try {
+      setIsGeneratingPdf(true);
+      const container = document.getElementById('reporting-engine');
+      if (!container) {
+        throw new Error('Report container element not found');
+      }
+
+      // Query printable cards inside report container
+      const pageCards = container.querySelectorAll('.print-page-card');
+      const targetElements = pageCards.length > 0 ? Array.from(pageCards) : [container];
+
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      for (let i = 0; i < targetElements.length; i++) {
+        const el = targetElements[i] as HTMLElement;
+        const canvas = await html2canvas(el, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const imgProps = pdf.getImageProperties(imgData);
+        
+        let imgWidth = pdfWidth;
+        let imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+        if (imgHeight > pdfHeight) {
+          const scale = pdfHeight / imgHeight;
+          imgWidth = imgWidth * scale;
+          imgHeight = pdfHeight;
+        }
+
+        if (i > 0) {
+          pdf.addPage();
+        }
+
+        const xOffset = (pdfWidth - imgWidth) / 2;
+        const yOffset = (pdfHeight - imgHeight) / 2;
+
+        pdf.addImage(imgData, 'JPEG', xOffset, yOffset, imgWidth, imgHeight);
+      }
+
+      const pdfOutput = pdf.output('datauristring');
+      const base64Data = pdfOutput.split(',')[1];
+      const fileName = `attendance_report_${Date.now()}.pdf`;
+
+      const savedFile = await Filesystem.writeFile({
+        path: fileName,
+        data: base64Data,
+        directory: Directory.Cache
+      });
+
+      await Share.share({
+        title: 'تقرير الحضور والغياب',
+        text: 'مشاركة تقرير الحضور - نظام بصمة تك',
+        url: savedFile.uri,
+        dialogTitle: 'طباعة أو مشاركة تقرير الحضور'
+      });
+    } catch (err) {
+      console.error('Error rendering or sharing PDF report on mobile:', err);
+      alert('تعذر إنشاء ملف التقرير. حاول مرة أخرى.');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   return (
@@ -540,10 +630,20 @@ export default function ReportingEngine() {
           <div className="flex justify-end gap-3 print-hidden">
             <button
               onClick={handlePrint}
-              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-2 cursor-pointer transition shadow"
+              disabled={isGeneratingPdf}
+              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-950 font-bold rounded-lg text-xs flex items-center gap-2 cursor-pointer transition shadow"
             >
-              <Printer className="w-4 h-4" />
-              <span>طباعة التقارير الورقية / تصدير PDF</span>
+              {isGeneratingPdf ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <span>جاري تجهيز الملف...</span>
+                </>
+              ) : (
+                <>
+                  <Printer className="w-4 h-4" />
+                  <span>طباعة التقارير الورقية / تصدير PDF</span>
+                </>
+              )}
             </button>
           </div>
 
