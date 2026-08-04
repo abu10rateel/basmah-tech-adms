@@ -103,25 +103,39 @@ async function startServer() {
     }
   });
 
-  // Serve root level icons
-  app.get(['/icon-192.png', '/icon-512.png'], (req, res) => {
-    const filename = req.path.replace('/', '');
-    const iconPath = path.join(process.cwd(), 'public', filename);
-    const distIconPath = path.join(process.cwd(), 'dist', filename);
-    const targetPath = fs.existsSync(distIconPath) ? distIconPath : iconPath;
+  // Serve root level & subfolder icons reliably with exact headers
+  app.get([
+    '/icon-192.png',
+    '/icon-512.png',
+    '/icon-maskable-192.png',
+    '/icon-maskable-512.png',
+    '/favicon.png',
+    '/favicon.ico',
+    '/app-icon.jpg',
+    '/icons/:filename',
+    '/static/:filename'
+  ], (req, res) => {
+    let relativePath = req.path.startsWith('/') ? req.path.slice(1) : req.path;
+    const distIconPath = path.join(process.cwd(), 'dist', relativePath);
+    const publicIconPath = path.join(process.cwd(), 'public', relativePath);
+    const targetPath = fs.existsSync(distIconPath) ? distIconPath : publicIconPath;
 
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
     if (fs.existsSync(targetPath)) {
-      res.sendFile(targetPath);
+      if (req.path.endsWith('.png')) {
+        res.setHeader('Content-Type', 'image/png');
+      } else if (req.path.endsWith('.ico')) {
+        res.setHeader('Content-Type', 'image/x-icon');
+      } else if (req.path.endsWith('.jpg') || req.path.endsWith('.jpeg')) {
+        res.setHeader('Content-Type', 'image/jpeg');
+      }
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.sendFile(targetPath);
     } else {
-      res.status(404).send('Icon not found');
+      return res.status(404).send('Icon not found');
     }
   });
-
-  // Ensure /icons directory is served reliably across environments
-  app.use('/icons', express.static(path.join(process.cwd(), 'public', 'icons')));
-  app.use('/icons', express.static(path.join(process.cwd(), 'dist', 'icons')));
 
   // --- API ROUTES FIRST ---
 
@@ -1244,15 +1258,13 @@ async function startServer() {
           pathLower.includes('push')
         ) {
           res.status(200);
-          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-          return res.send('OK');
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');          return res.send('OK');
         }
 
         // GET request: Return standard ZKTeco ADMS handshake config options ending with OK, enforcing Saudi GMT+3 ServerTime
         if (req.method === 'GET') {
           const responseConfig =
-            `GET OPTION FROM: ${sn || 'device'}\r\n` +
-            `Stamp=9999\r\n` +
+            `GET OPTION FROM: ${sn || 'device'}\r\n` +            `Stamp=9999\r\n` +
             `OpStamp=9999\r\n` +
             `PhotoStamp=9999\r\n` +
             `ErrorDelay=60\r\n` +
@@ -1264,8 +1276,7 @@ async function startServer() {
             `OK\r\n`;
 
           res.status(200);
-          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-          return res.send(responseConfig);
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');          return res.send(responseConfig);
         }
 
         // POST request: Parse incoming attendance punches (ATTLOG)
@@ -1353,15 +1364,12 @@ async function startServer() {
           }
 
           res.status(200);
-          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-          return res.send(`OK: ${count}\n`);
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');          return res.send(`OK: ${count}\n`);
         }
 
         // Fallback response for any other HTTP method
         res.status(200);
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('ServerTime', saudiTime);
-        res.send('OK');
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');        res.send('OK');
       } catch (err) {
         console.error('[ZK ADMS] Endpoint error:', err);
         res.status(200);
@@ -1752,17 +1760,36 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath, {
-      setHeaders: (res, filePath) => {
+    const publicPath = path.join(process.cwd(), 'public');
+
+    const staticOptions = {
+      setHeaders: (res: any, filePath: string) => {
         if (filePath.endsWith('sw.js')) {
           res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
           res.setHeader('Service-Worker-Allowed', '/');
           res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         } else if (filePath.endsWith('manifest.json')) {
           res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+        } else if (filePath.endsWith('.png')) {
+          res.setHeader('Content-Type', 'image/png');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        } else if (filePath.endsWith('.ico')) {
+          res.setHeader('Content-Type', 'image/x-icon');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+          res.setHeader('Content-Type', 'image/jpeg');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         }
       }
-    }));
+    };
+
+    app.use(express.static(distPath, staticOptions));
+    app.use(express.static(publicPath, staticOptions));
+
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
