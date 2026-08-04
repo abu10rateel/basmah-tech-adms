@@ -112,7 +112,8 @@ async function startServer() {
     '/favicon.png',
     '/favicon.ico',
     '/app-icon.jpg',
-    '/icons/:filename'
+    '/icons/:filename',
+    '/static/:filename'
   ], (req, res) => {
     let relativePath = req.path.startsWith('/') ? req.path.slice(1) : req.path;
     const distIconPath = path.join(process.cwd(), 'dist', relativePath);
