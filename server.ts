@@ -103,25 +103,38 @@ async function startServer() {
     }
   });
 
-  // Serve root level icons
-  app.get(['/icon-192.png', '/icon-512.png'], (req, res) => {
-    const filename = req.path.replace('/', '');
-    const iconPath = path.join(process.cwd(), 'public', filename);
-    const distIconPath = path.join(process.cwd(), 'dist', filename);
-    const targetPath = fs.existsSync(distIconPath) ? distIconPath : iconPath;
+  // Serve root level & subfolder icons reliably with exact headers
+  app.get([
+    '/icon-192.png',
+    '/icon-512.png',
+    '/icon-maskable-192.png',
+    '/icon-maskable-512.png',
+    '/favicon.png',
+    '/favicon.ico',
+    '/app-icon.jpg',
+    '/icons/:filename'
+  ], (req, res) => {
+    let relativePath = req.path.startsWith('/') ? req.path.slice(1) : req.path;
+    const distIconPath = path.join(process.cwd(), 'dist', relativePath);
+    const publicIconPath = path.join(process.cwd(), 'public', relativePath);
+    const targetPath = fs.existsSync(distIconPath) ? distIconPath : publicIconPath;
 
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
     if (fs.existsSync(targetPath)) {
-      res.sendFile(targetPath);
+      if (req.path.endsWith('.png')) {
+        res.setHeader('Content-Type', 'image/png');
+      } else if (req.path.endsWith('.ico')) {
+        res.setHeader('Content-Type', 'image/x-icon');
+      } else if (req.path.endsWith('.jpg') || req.path.endsWith('.jpeg')) {
+        res.setHeader('Content-Type', 'image/jpeg');
+      }
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.sendFile(targetPath);
     } else {
-      res.status(404).send('Icon not found');
+      return res.status(404).send('Icon not found');
     }
   });
-
-  // Ensure /icons directory is served reliably across environments
-  app.use('/icons', express.static(path.join(process.cwd(), 'public', 'icons')));
-  app.use('/icons', express.static(path.join(process.cwd(), 'dist', 'icons')));
 
   // --- API ROUTES FIRST ---
 
@@ -1772,12 +1785,15 @@ async function startServer() {
         } else if (filePath.endsWith('.png')) {
           res.setHeader('Content-Type', 'image/png');
           res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         } else if (filePath.endsWith('.ico')) {
           res.setHeader('Content-Type', 'image/x-icon');
           res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
           res.setHeader('Content-Type', 'image/jpeg');
           res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         }
       }
     };
