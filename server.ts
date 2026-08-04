@@ -1240,6 +1240,41 @@ async function startServer() {
           pathLower.includes('ping') ||
           pathLower.includes('push')
         ) {
+          // If this is a command callback POST from devicecmd
+          if (req.method === 'POST' && pathLower.includes('devicecmd')) {
+            const cmdIdMatch = payloadText.match(/ID=([A-Za-z0-9_]+)/i) || (req.query.ID ? [null, req.query.ID as string] : null);
+            if (cmdIdMatch && cmdIdMatch[1]) {
+              console.log(`[ZK ADMS] Received execution callback for command ID: ${cmdIdMatch[1]} from SN: ${sn}`);
+              await firebaseDb.markDeviceCommandSent(cmdIdMatch[1]);
+            }
+            res.status(200);
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            return res.send('OK');
+          }
+
+          // If device is polling for pending commands via GET
+          if (sn) {
+            const pendingCmds = await firebaseDb.getPendingDeviceCommands(sn);
+            if (pendingCmds && pendingCmds.length > 0) {
+              console.log(`[ZK ADMS] Delivering ${pendingCmds.length} pending command(s) to SN: ${sn}`);
+              let commandResponseText = '';
+              for (const c of pendingCmds) {
+                let cmdStr = c.command || 'SET_TIME';
+                if (cmdStr === 'SET_TIME' || cmdStr === 'SET TIME') {
+                  cmdStr = `SET TIME ${c.time}`;
+                }
+                commandResponseText += `C:${c.id}:${cmdStr}\r\n`;
+
+                // Immediately mark as sent so it is delivered ONCE
+                await firebaseDb.markDeviceCommandSent(c.id);
+              }
+
+              res.status(200);
+              res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+              return res.send(commandResponseText);
+            }
+          }
+
           res.status(200);
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
           return res.send('OK');
@@ -1479,6 +1514,152 @@ async function startServer() {
     } catch (err) {
       console.error('Delete device API error:', err);
       res.status(500).json({ error: 'حدث خطأ في حذف الجهاز.' });
+    }
+  });
+
+  // --- DEVICE TIME MANAGEMENT REST APIs ---
+
+  // Get all devices enriched with connection status, estimated time, and pending time command
+  app.get('/api/devices/time', async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: 'غير مصرح بالدخول' });
+      }
+
+      const tenantDevices = await firebaseDb.getDevices(userId);
+      const allCommands = await firebaseDb.getDeviceCommands();
+
+      const now = new Date();
+      const enriched = tenantDevices.map((device: any) => {
+        const snUpper = (device.serial_number || '').trim().toUpperCase();
+        const lastPingStr = device.last_ping || device.created_at || null;
+        
+        let isOnline = false;
+        let lastPingDate: Date | null = null;
+        if (lastPingStr) {
+          lastPingDate = new Date(lastPingStr);
+          isOnline = (now.getTime() - lastPingDate.getTime()) < (5 * 60 * 1000);
+        }
+
+        const pendingCmd = allCommands.find(
+          (c: any) => (c.deviceSn || '').trim().toUpperCase() === snUpper && c.sent === false
+        ) || null;
+
+        const riyadhDateStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Riyadh' });
+        const dRiyadh = new Date(riyadhDateStr);
+        const yyyy = dRiyadh.getFullYear();
+        const mm = String(dRiyadh.getMonth() + 1).padStart(2, '0');
+        const dd = String(dRiyadh.getDate()).padStart(2, '0');
+        const hh = String(dRiyadh.getHours()).padStart(2, '0');
+        const min = String(dRiyadh.getMinutes()).padStart(2, '0');
+        const ss = String(dRiyadh.getSeconds()).padStart(2, '0');
+        const currentRiyadhFormatted = `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+
+        return {
+          id: device.id,
+          serial_number: device.serial_number,
+          name: device.name,
+          last_ping: lastPingStr,
+          is_online: isOnline,
+          pending_command: pendingCmd,
+          estimated_time: currentRiyadhFormatted
+        };
+      });
+
+      res.json(enriched);
+    } catch (err) {
+      console.error('Get devices time API error:', err);
+      res.status(500).json({ error: 'حدث خطأ في جلب بيانات أوقات الأجهزة.' });
+    }
+  });
+
+  // Create time sync command for a specific device
+  app.post('/api/devices/time/sync', async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: 'غير مصرح بالدخول' });
+      }
+
+      const { deviceSn, timeType, customTime } = req.body;
+      if (!deviceSn) {
+        return res.status(400).json({ error: 'الرقم التسلسلي للجهاز مطلوب.' });
+      }
+
+      let timeStr = '';
+      if (timeType === 'custom' && customTime) {
+        timeStr = customTime;
+      } else if (timeType === 'server') {
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        timeStr = `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+      } else {
+        // Asia/Riyadh (UTC+3)
+        const riyadhDateStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Riyadh' });
+        const d = new Date(riyadhDateStr);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        timeStr = `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+      }
+
+      const newCommand = await firebaseDb.createDeviceCommand({
+        deviceSn,
+        time: timeStr,
+        command: 'SET_TIME'
+      });
+
+      console.log(`[Device Time Sync] Created SET_TIME command for SN: ${deviceSn} with time: ${timeStr}`);
+
+      res.json({ success: true, command: newCommand });
+    } catch (err) {
+      console.error('Sync device time API error:', err);
+      res.status(500).json({ error: 'حدث خطأ في إنشاء أمر مزامنة الوقت.' });
+    }
+  });
+
+  // Get list of device commands
+  app.get('/api/devices/time/commands', async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: 'غير مصرح بالدخول' });
+      }
+
+      const { deviceSn } = req.query;
+      const commands = await firebaseDb.getDeviceCommands(deviceSn as string);
+      commands.sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+      res.json(commands);
+    } catch (err) {
+      console.error('Get device commands API error:', err);
+      res.status(500).json({ error: 'حدث خطأ في جلب سجل أوامر الأجهزة.' });
+    }
+  });
+
+  // Cancel/delete a device command
+  app.delete('/api/devices/time/commands/:id', async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: 'غير مصرح بالدخول' });
+      }
+
+      const { id } = req.params;
+      await firebaseDb.deleteDeviceCommand(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Delete device command API error:', err);
+      res.status(500).json({ error: 'حدث خطأ في إلغاء الأمر.' });
     }
   });
 

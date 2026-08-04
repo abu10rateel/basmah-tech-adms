@@ -440,5 +440,83 @@ export const firebaseDb = {
       console.error('updatePasswordRequestStatus error:', err);
       throw err;
     }
+  },
+
+  // --- DEVICE COMMANDS ---
+  async createDeviceCommand(data: { deviceSn: string; command?: string; time: string }) {
+    try {
+      const id = `cmd_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const docRef = doc(db, 'device_commands', id);
+      const cmdDoc = {
+        id,
+        deviceSn: data.deviceSn.trim().toUpperCase(),
+        command: data.command || 'SET_TIME',
+        time: data.time,
+        createdAt: new Date().toISOString(),
+        sent: false
+      };
+      await setDoc(docRef, cmdDoc);
+      return cmdDoc;
+    } catch (err) {
+      console.error('createDeviceCommand error:', err);
+      throw err;
+    }
+  },
+
+  async getPendingDeviceCommands(deviceSn: string) {
+    try {
+      const q = query(
+        collection(db, 'device_commands'),
+        where('deviceSn', '==', deviceSn.trim().toUpperCase()),
+        where('sent', '==', false)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => Object.assign({ id: d.id }, d.data())) as any[];
+    } catch (err) {
+      console.error('getPendingDeviceCommands error:', err);
+      throw err;
+    }
+  },
+
+  async markDeviceCommandSent(id: string) {
+    try {
+      const docRef = doc(db, 'device_commands', id);
+      await updateDoc(docRef, {
+        sent: true,
+        sentAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('markDeviceCommandSent error:', err);
+      throw err;
+    }
+  },
+
+  async getDeviceCommands(deviceSn?: string) {
+    try {
+      let q;
+      if (deviceSn) {
+        q = query(
+          collection(db, 'device_commands'),
+          where('deviceSn', '==', deviceSn.trim().toUpperCase())
+        );
+      } else {
+        q = query(collection(db, 'device_commands'));
+      }
+      const snap = await getDocs(q);
+      return snap.docs.map(d => Object.assign({ id: d.id }, d.data())) as any[];
+    } catch (err) {
+      console.error('getDeviceCommands error:', err);
+      throw err;
+    }
+  },
+
+  async deleteDeviceCommand(id: string) {
+    try {
+      const docRef = doc(db, 'device_commands', id);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.error('deleteDeviceCommand error:', err);
+      throw err;
+    }
   }
 };

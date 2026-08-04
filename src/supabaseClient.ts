@@ -596,6 +596,80 @@ export const db = {
     }
   },
 
+  async getDeviceTimeStatus(): Promise<any[]> {
+    const user = await this.getCurrentUser();
+    if (!user) return [];
+    try {
+      const response = await fetch('/api/devices/time', {
+        headers: { 'x-user-id': user.id }
+      });
+      const parsed = await safeFetchJson<any[]>(response);
+      return parsed.ok && Array.isArray(parsed.data) ? parsed.data : [];
+    } catch (err) {
+      console.error('Error fetching device time status:', err);
+      return [];
+    }
+  },
+
+  async syncDeviceTime(
+    deviceSn: string, 
+    timeType: 'server' | 'riyadh' | 'custom', 
+    customTime?: string
+  ): Promise<{ success: boolean; command?: any; error?: any }> {
+    const user = await this.getCurrentUser();
+    if (!user) return { success: false, error: 'غير مصرح بالدخول' };
+    try {
+      const response = await fetch('/api/devices/time/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id
+        },
+        body: JSON.stringify({ deviceSn, timeType, customTime })
+      });
+      const parsed = await safeFetchJson(response);
+      const result = parsed.data || {};
+      if (!parsed.ok) {
+        return { success: false, error: result.error || 'فشل إرسال أمر التزامن' };
+      }
+      return { success: true, command: result.command };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'خطأ بالاتصال بالخادم' };
+    }
+  },
+
+  async getDeviceCommandsHistory(deviceSn?: string): Promise<any[]> {
+    const user = await this.getCurrentUser();
+    if (!user) return [];
+    try {
+      let url = '/api/devices/time/commands';
+      if (deviceSn) url += `?deviceSn=${encodeURIComponent(deviceSn)}`;
+      const response = await fetch(url, {
+        headers: { 'x-user-id': user.id }
+      });
+      const parsed = await safeFetchJson<any[]>(response);
+      return parsed.ok && Array.isArray(parsed.data) ? parsed.data : [];
+    } catch (err) {
+      console.error('Error fetching device commands:', err);
+      return [];
+    }
+  },
+
+  async cancelDeviceCommand(id: string): Promise<{ success: boolean; error?: any }> {
+    const user = await this.getCurrentUser();
+    if (!user) return { success: false, error: 'غير مصرح بالدخول' };
+    try {
+      const response = await fetch(`/api/devices/time/commands/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': user.id }
+      });
+      const parsed = await safeFetchJson(response);
+      return { success: parsed.ok };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
   async getZkRawLogs(params?: { fromDate?: string; toDate?: string }): Promise<any[]> {
     const user = await this.getCurrentUser();
     if (!user) return [];

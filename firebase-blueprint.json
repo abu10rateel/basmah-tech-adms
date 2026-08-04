@@ -84,6 +84,20 @@
       },
       "required": ["id", "user_id", "serial_number", "name"]
     },
+    "DeviceCommand": {
+      "title": "DeviceCommand",
+      "description": "Queued commands for ZKTeco ADMS hardware devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "deviceSn": { "type": "string" },
+        "command": { "type": "string" },
+        "time": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "sent": { "type": "boolean" }
+      },
+      "required": ["id", "deviceSn", "command", "time", "createdAt", "sent"]
+    },
     "ZkRawLog": {
       "title": "ZkRawLog",
       "description": "Raw fingerprint punch parsed from ADMS devices",
@@ -120,6 +134,10 @@
     "/devices/{deviceId}": {
       "schema": "Device",
       "description": "Devices Collection"
+    },
+    "/device_commands/{cmdId}": {
+      "schema": "DeviceCommand",
+      "description": "ZKTeco Device Commands Collection"
     },
     "/zk_raw_logs/{rawLogId}": {
       "schema": "ZkRawLog",
