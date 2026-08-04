@@ -12,7 +12,7 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'script',
-        includeAssets: ['favicon.ico', 'robots.txt', 'icons/*', 'offline.html'],
+        includeAssets: ['favicon.ico', 'favicon.png', 'robots.txt', 'icons/*', 'icon-*.png', 'offline.html'],
         manifest: {
           id: '/',
           name: 'نظام بصمة تك لإدارة البصمات والحضور',
