@@ -1190,6 +1190,21 @@ async function startServer() {
     }
   };
 
+  // Helper function to get current Saudi Arabia local time (GMT+3 / Asia/Riyadh) in YYYY-MM-DD HH:mm:ss format
+  const getSaudiTimeString = (): string => {
+    const d = new Date();
+    const utcMs = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const saudiMs = utcMs + (3 * 3600000); // Saudi Arabia is UTC+3
+    const saudiDate = new Date(saudiMs);
+    const yyyy = saudiDate.getFullYear();
+    const mm = String(saudiDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(saudiDate.getDate()).padStart(2, '0');
+    const hh = String(saudiDate.getHours()).padStart(2, '0');
+    const min = String(saudiDate.getMinutes()).padStart(2, '0');
+    const ss = String(saudiDate.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+  };
+
   // Handle GET and POST for ZKTeco ADMS device data transmission across all path variations including /iclock/*, /adms*, etc.
   app.all(
     [
@@ -1218,6 +1233,8 @@ async function startServer() {
           await updateDevicePing(sn);
         }
 
+        const saudiTime = getSaudiTimeString();
+
         // Handle keep-alive / command polling endpoints (/iclock/getrequest, /iclock/devicecmd, etc.)
         if (
           pathLower.includes('getrequest') ||
@@ -1228,13 +1245,17 @@ async function startServer() {
         ) {
           res.status(200);
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.setHeader('ServerTime', saudiTime);
           return res.send('OK');
         }
 
-        // GET request: Return standard ZKTeco ADMS handshake config options ending with OK
+        // GET request: Return standard ZKTeco ADMS handshake config options ending with OK, enforcing Saudi GMT+3 ServerTime
         if (req.method === 'GET') {
           const responseConfig =
             `GET OPTION FROM: ${sn || 'device'}\r\n` +
+            `ServerTime=${saudiTime}\r\n` +
+            `TimeZone=3\r\n` +
+            `TZ=3\r\n` +
             `Stamp=9999\r\n` +
             `OpStamp=9999\r\n` +
             `PhotoStamp=9999\r\n` +
@@ -1248,6 +1269,7 @@ async function startServer() {
 
           res.status(200);
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.setHeader('ServerTime', saudiTime);
           return res.send(responseConfig);
         }
 
@@ -1337,12 +1359,14 @@ async function startServer() {
 
           res.status(200);
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.setHeader('ServerTime', saudiTime);
           return res.send(`OK: ${count}\n`);
         }
 
         // Fallback response for any other HTTP method
         res.status(200);
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('ServerTime', saudiTime);
         res.send('OK');
       } catch (err) {
         console.error('[ZK ADMS] Endpoint error:', err);
