@@ -1758,17 +1758,33 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath, {
-      setHeaders: (res, filePath) => {
+    const publicPath = path.join(process.cwd(), 'public');
+
+    const staticOptions = {
+      setHeaders: (res: any, filePath: string) => {
         if (filePath.endsWith('sw.js')) {
           res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
           res.setHeader('Service-Worker-Allowed', '/');
           res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         } else if (filePath.endsWith('manifest.json')) {
           res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+        } else if (filePath.endsWith('.png')) {
+          res.setHeader('Content-Type', 'image/png');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+        } else if (filePath.endsWith('.ico')) {
+          res.setHeader('Content-Type', 'image/x-icon');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+        } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+          res.setHeader('Content-Type', 'image/jpeg');
+          res.setHeader('Access-Control-Allow-Origin', '*');
         }
       }
-    }));
+    };
+
+    app.use(express.static(distPath, staticOptions));
+    app.use(express.static(publicPath, staticOptions));
+
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
