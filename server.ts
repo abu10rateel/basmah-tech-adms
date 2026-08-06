@@ -1267,21 +1267,19 @@ async function startServer() {
               for (const c of pendingCmds) {
                 const cmdFormat = c.command || 'ALL_FORMATS';
 
-                if (cmdFormat === 'ALL_FORMATS' || cmdFormat === 'SET_TIME') {
-                  // Output all 4 standard ZKTeco ADMS variations in one command response block
-                  // This ensures M2000 and any firmware version parses and applies the time!
-                  commandResponseText += `C:${c.id}:DATA OPTIONS SetTIME=${c.time}\r\n`;
-                  commandResponseText += `C:${c.id}_2:SET OPTION SetTIME=${c.time}\r\n`;
-                  commandResponseText += `C:${c.id}_3:SetTIME ${c.time}\r\n`;
-                  commandResponseText += `C:${c.id}_4:SET TIME ${c.time}\r\n`;
-                } else if (cmdFormat === 'DATA_OPTIONS') {
-                  commandResponseText += `C:${c.id}:DATA OPTIONS SetTIME=${c.time}\r\n`;
+                if (cmdFormat === 'DATA_OPTION' || cmdFormat === 'ALL_FORMATS' || cmdFormat === 'SET_TIME') {
+                  // Official ZKTeco Push SDK ADMS parameter setting command (DATA OPTION singular)
+                  commandResponseText += `C:${c.id}:DATA OPTION SetTIME=${c.time}\r\n`;
                 } else if (cmdFormat === 'SET_OPTION') {
                   commandResponseText += `C:${c.id}:SET OPTION SetTIME=${c.time}\r\n`;
-                } else if (cmdFormat === 'DIRECT_SET_TIME') {
+                } else if (cmdFormat === 'SET_TIME_EQUAL') {
+                  commandResponseText += `C:${c.id}:SetTIME=${c.time}\r\n`;
+                } else if (cmdFormat === 'SET_TIME_SPACE' || cmdFormat === 'DIRECT_SET_TIME') {
                   commandResponseText += `C:${c.id}:SetTIME ${c.time}\r\n`;
+                } else if (cmdFormat === 'SET_TIME_CAPS') {
+                  commandResponseText += `C:${c.id}:SET TIME ${c.time}\r\n`;
                 } else {
-                  commandResponseText += `C:${c.id}:DATA OPTIONS SetTIME=${c.time}\r\n`;
+                  commandResponseText += `C:${c.id}:DATA OPTION SetTIME=${c.time}\r\n`;
                 }
 
                 // Mark as delivered to device

@@ -46,7 +46,7 @@ export default function DeviceTimeManager() {
   // Sync Modal State
   const [selectedDevice, setSelectedDevice] = useState<DeviceItem | null>(null);
   const [timeOption, setTimeOption] = useState<'riyadh' | 'server' | 'custom'>('riyadh');
-  const [cmdFormat, setCmdFormat] = useState<'ALL_FORMATS' | 'DATA_OPTIONS' | 'SET_OPTION' | 'DIRECT_SET_TIME'>('ALL_FORMATS');
+  const [cmdFormat, setCmdFormat] = useState<'DATA_OPTION' | 'SET_OPTION' | 'SET_TIME_EQUAL' | 'DIRECT_SET_TIME' | 'SET_TIME_CAPS'>('DATA_OPTION');
   const [customDateTime, setCustomDateTime] = useState<string>(() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -91,7 +91,7 @@ export default function DeviceTimeManager() {
   const handleOpenSyncModal = (dev: DeviceItem) => {
     setSelectedDevice(dev);
     setTimeOption('riyadh');
-    setCmdFormat('ALL_FORMATS');
+    setCmdFormat('DATA_OPTION');
     const d = new Date();
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -595,28 +595,15 @@ export default function DeviceTimeManager() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   <button
                     type="button"
-                    onClick={() => setCmdFormat('ALL_FORMATS')}
+                    onClick={() => setCmdFormat('DATA_OPTION')}
                     className={`p-2.5 rounded-xl border text-right transition ${
-                      cmdFormat === 'ALL_FORMATS'
+                      cmdFormat === 'DATA_OPTION'
                         ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-bold'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
                   >
-                    <p className="text-[11px] font-black">شامل - جميع الصيغ القياسية معاً (موصى به)</p>
-                    <p className="text-[9px] text-slate-400">يضمن عمل التغيير على أجهزة M2000 وأجهزة ZK القديمة والحديثة</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCmdFormat('DATA_OPTIONS')}
-                    className={`p-2.5 rounded-xl border text-right transition ${
-                      cmdFormat === 'DATA_OPTIONS'
-                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-bold'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <p className="text-[11px] font-black">DATA OPTIONS SetTIME=...</p>
-                    <p className="text-[9px] text-slate-400">الصيغة الرسمية لبروتوكول ZK ADMS PUSH</p>
+                    <p className="text-[11px] font-black">DATA OPTION SetTIME=... (موصى به)</p>
+                    <p className="text-[9px] text-slate-400">الصيغة القياسية الرسمية لبروتوكول ZK ADMS Push</p>
                   </button>
 
                   <button
@@ -629,7 +616,20 @@ export default function DeviceTimeManager() {
                     }`}
                   >
                     <p className="text-[11px] font-black">SET OPTION SetTIME=...</p>
-                    <p className="text-[9px] text-slate-400">صيغة إعدادات النظام ZK</p>
+                    <p className="text-[9px] text-slate-400">صيغة إعدادات النظام للنماذج القديمة</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCmdFormat('SET_TIME_EQUAL')}
+                    className={`p-2.5 rounded-xl border text-right transition ${
+                      cmdFormat === 'SET_TIME_EQUAL'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <p className="text-[11px] font-black">SetTIME=YYYY-MM-DD...</p>
+                    <p className="text-[9px] text-slate-400">صيغة إسناد القيمة المباشرة بـ (=)</p>
                   </button>
 
                   <button
@@ -642,7 +642,7 @@ export default function DeviceTimeManager() {
                     }`}
                   >
                     <p className="text-[11px] font-black">SetTIME YYYY-MM-DD...</p>
-                    <p className="text-[9px] text-slate-400">صيغة الوقت المباشرة</p>
+                    <p className="text-[9px] text-slate-400">صيغة الأمر المباشر بمسافة</p>
                   </button>
                 </div>
               </div>
@@ -651,20 +651,20 @@ export default function DeviceTimeManager() {
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
                 <span className="text-[11px] font-bold text-slate-400 block">الأمر البرمجي المصدر للجهاز (ADMS Protocol Command):</span>
                 <code className="text-emerald-400 font-mono text-[11px] block dir-ltr whitespace-pre-wrap">
-                  {cmdFormat === 'ALL_FORMATS' ? (
-                    `C:<cmdId>:DATA OPTIONS SetTIME=${
-                      timeOption === 'custom' 
-                        ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
-                        : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
-                    }\nC:<cmdId>_2:SET OPTION SetTIME=...\nC:<cmdId>_3:SetTIME ...`
-                  ) : cmdFormat === 'DATA_OPTIONS' ? (
-                    `C:<cmdId>:DATA OPTIONS SetTIME=${
+                  {cmdFormat === 'DATA_OPTION' ? (
+                    `C:<cmdId>:DATA OPTION SetTIME=${
                       timeOption === 'custom' 
                         ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
                         : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
                     }`
                   ) : cmdFormat === 'SET_OPTION' ? (
                     `C:<cmdId>:SET OPTION SetTIME=${
+                      timeOption === 'custom' 
+                        ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
+                        : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
+                    }`
+                  ) : cmdFormat === 'SET_TIME_EQUAL' ? (
+                    `C:<cmdId>:SetTIME=${
                       timeOption === 'custom' 
                         ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
                         : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
