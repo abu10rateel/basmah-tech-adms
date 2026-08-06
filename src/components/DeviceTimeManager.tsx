@@ -46,6 +46,7 @@ export default function DeviceTimeManager() {
   // Sync Modal State
   const [selectedDevice, setSelectedDevice] = useState<DeviceItem | null>(null);
   const [timeOption, setTimeOption] = useState<'riyadh' | 'server' | 'custom'>('riyadh');
+  const [cmdFormat, setCmdFormat] = useState<'ALL_FORMATS' | 'DATA_OPTIONS' | 'SET_OPTION' | 'DIRECT_SET_TIME'>('ALL_FORMATS');
   const [customDateTime, setCustomDateTime] = useState<string>(() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -90,6 +91,7 @@ export default function DeviceTimeManager() {
   const handleOpenSyncModal = (dev: DeviceItem) => {
     setSelectedDevice(dev);
     setTimeOption('riyadh');
+    setCmdFormat('ALL_FORMATS');
     const d = new Date();
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -122,11 +124,12 @@ export default function DeviceTimeManager() {
       const result = await db.syncDeviceTime(
         selectedDevice.serial_number,
         timeOption,
-        formattedCustomTime
+        formattedCustomTime,
+        cmdFormat
       );
 
       if (result.success) {
-        setSuccess(`تم إنشاء أمر تغيير الوقت بنجاح للجهاز ${selectedDevice.name} (${selectedDevice.serial_number}). سيتم إرساله فور قيام الجهاز بالطلب.`);
+        setSuccess(`تم إنشاء أمر تغيير الوقت بنجاح للجهاز ${selectedDevice.name} (${selectedDevice.serial_number}). سيتم تجربة إرسال جميع الصيغ فور قيام الجهاز بالطلب.`);
         setSelectedDevice(null);
         await loadData();
       } else {
@@ -380,7 +383,7 @@ export default function DeviceTimeManager() {
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
         <h3 className="text-base sm:text-lg font-black text-slate-100 flex items-center gap-2">
           <History className="w-5 h-5 text-emerald-400" />
-          <span>سجل أوامر الوقت والأوامر المعلقة (device_commands)</span>
+          <span>سجل أوامر الوقت وحالة التنفيذ من أجهزة البصمة (device_commands)</span>
         </h3>
 
         {commandsHistory.length === 0 ? (
@@ -391,50 +394,80 @@ export default function DeviceTimeManager() {
               <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800 text-[11px]">
                 <tr>
                   <th className="p-3">الرقم التسلسلي (SN)</th>
-                  <th className="p-3">نوع الأمر</th>
+                  <th className="p-3">صيغة الأمر</th>
                   <th className="p-3">الوقت الموجه للجهاز</th>
                   <th className="p-3">تاريخ الإنشاء</th>
-                  <th className="p-3">حالة الإرسال</th>
+                  <th className="p-3">حالة التنفيذ الحقيقية</th>
                   <th className="p-3 text-center">إجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-medium">
-                {commandsHistory.map((cmd) => (
-                  <tr key={cmd.id} className="hover:bg-slate-800/40 transition">
-                    <td className="p-3 font-mono font-bold text-emerald-400">{cmd.deviceSn}</td>
-                    <td className="p-3 font-mono">{cmd.command || 'SET_TIME'}</td>
-                    <td className="p-3 font-mono dir-ltr font-bold text-slate-100">{cmd.time}</td>
-                    <td className="p-3 text-slate-400">
-                      {cmd.createdAt ? new Date(cmd.createdAt).toLocaleString('ar-SA') : '-'}
-                    </td>
-                    <td className="p-3">
-                      {cmd.sent ? (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 inline-flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>تم الاستلام والتحديث</span>
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400 inline-flex items-center gap-1 animate-pulse">
-                          <Clock className="w-3 h-3" />
-                          <span>معلق (بانتظار طلب الجهاز)</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-center">
-                      {!cmd.sent ? (
-                        <button
-                          onClick={() => handleCancelCommand(cmd.id)}
-                          className="p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 rounded-lg transition cursor-pointer"
-                          title="إلغاء الأمر"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      ) : (
-                        <span className="text-slate-600 text-[10px]">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {commandsHistory.map((cmd) => {
+                  const status = cmd.status || (cmd.sent ? 'success' : 'pending');
+                  return (
+                    <tr key={cmd.id} className="hover:bg-slate-800/40 transition">
+                      <td className="p-3 font-mono font-bold text-emerald-400">{cmd.deviceSn}</td>
+                      <td className="p-3 font-mono text-[11px] text-slate-300">{cmd.command || 'ALL_FORMATS'}</td>
+                      <td className="p-3 font-mono dir-ltr font-bold text-slate-100">{cmd.time}</td>
+                      <td className="p-3 text-slate-400">
+                        {cmd.createdAt ? new Date(cmd.createdAt).toLocaleString('ar-SA') : '-'}
+                      </td>
+                      <td className="p-3">
+                        {status === 'success' ? (
+                          <div className="space-y-0.5">
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>تم تأكيد التحديث بنجاح (Return=0)</span>
+                            </span>
+                            {cmd.confirmedAt && (
+                              <p className="text-[10px] text-slate-500 font-mono">
+                                تأكيد الجهاز: {new Date(cmd.confirmedAt).toLocaleTimeString('ar-SA')}
+                              </p>
+                            )}
+                          </div>
+                        ) : status === 'failed' ? (
+                          <div className="space-y-0.5">
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/10 border border-rose-500/30 text-rose-400 inline-flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>رفض الجهاز الأمر (Return={cmd.returnCode || '-1'})</span>
+                            </span>
+                            <p className="text-[10px] text-rose-400/80">الصيغة غير مدعومة في هذه الفيرموير</p>
+                          </div>
+                        ) : status === 'delivered' ? (
+                          <div className="space-y-0.5">
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-500/10 border border-sky-500/30 text-sky-400 inline-flex items-center gap-1">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>تم تسليم الأمر للجهاز (بانتظار شاشة التأكيد)</span>
+                            </span>
+                            {cmd.deliveredAt && (
+                              <p className="text-[10px] text-slate-500 font-mono">
+                                التسليم: {new Date(cmd.deliveredAt).toLocaleTimeString('ar-SA')}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400 inline-flex items-center gap-1 animate-pulse">
+                            <Clock className="w-3 h-3" />
+                            <span>معلق (بانتظار طلب الجهاز بالخادم)</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3 text-center">
+                        {status === 'pending' ? (
+                          <button
+                            onClick={() => handleCancelCommand(cmd.id)}
+                            className="p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 rounded-lg transition cursor-pointer"
+                            title="إلغاء الأمر"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <span className="text-slate-600 text-[10px]">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -449,7 +482,7 @@ export default function DeviceTimeManager() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full space-y-5 shadow-2xl text-right"
+              className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full space-y-5 shadow-2xl text-right max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2">
@@ -480,7 +513,7 @@ export default function DeviceTimeManager() {
               {/* Time Source Selector */}
               <div className="space-y-3">
                 <label className="text-xs font-bold text-slate-200 block">
-                  اختر مصادر الوقت المراد إرسالها للجهاز:
+                  1. اختر الوقت المراد ضبط جهاز البصمة عليه:
                 </label>
 
                 {/* Option 1: Asia/Riyadh */}
@@ -554,15 +587,95 @@ export default function DeviceTimeManager() {
                 </div>
               </div>
 
+              {/* Protocol Command Format Selector */}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <label className="text-xs font-bold text-slate-200 block">
+                  2. اختر صيغة بروتوكول ZKTeco ADMS لتغيير الوقت:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setCmdFormat('ALL_FORMATS')}
+                    className={`p-2.5 rounded-xl border text-right transition ${
+                      cmdFormat === 'ALL_FORMATS'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <p className="text-[11px] font-black">شامل - جميع الصيغ القياسية معاً (موصى به)</p>
+                    <p className="text-[9px] text-slate-400">يضمن عمل التغيير على أجهزة M2000 وأجهزة ZK القديمة والحديثة</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCmdFormat('DATA_OPTIONS')}
+                    className={`p-2.5 rounded-xl border text-right transition ${
+                      cmdFormat === 'DATA_OPTIONS'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <p className="text-[11px] font-black">DATA OPTIONS SetTIME=...</p>
+                    <p className="text-[9px] text-slate-400">الصيغة الرسمية لبروتوكول ZK ADMS PUSH</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCmdFormat('SET_OPTION')}
+                    className={`p-2.5 rounded-xl border text-right transition ${
+                      cmdFormat === 'SET_OPTION'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <p className="text-[11px] font-black">SET OPTION SetTIME=...</p>
+                    <p className="text-[9px] text-slate-400">صيغة إعدادات النظام ZK</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCmdFormat('DIRECT_SET_TIME')}
+                    className={`p-2.5 rounded-xl border text-right transition ${
+                      cmdFormat === 'DIRECT_SET_TIME'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <p className="text-[11px] font-black">SetTIME YYYY-MM-DD...</p>
+                    <p className="text-[9px] text-slate-400">صيغة الوقت المباشرة</p>
+                  </button>
+                </div>
+              </div>
+
               {/* Protocol Command Format Preview */}
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
                 <span className="text-[11px] font-bold text-slate-400 block">الأمر البرمجي المصدر للجهاز (ADMS Protocol Command):</span>
-                <code className="text-emerald-400 font-mono text-xs block dir-ltr">
-                  C:&lt;cmdId&gt;:SET TIME {
-                    timeOption === 'custom' 
-                      ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
-                      : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
-                  }
+                <code className="text-emerald-400 font-mono text-[11px] block dir-ltr whitespace-pre-wrap">
+                  {cmdFormat === 'ALL_FORMATS' ? (
+                    `C:<cmdId>:DATA OPTIONS SetTIME=${
+                      timeOption === 'custom' 
+                        ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
+                        : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
+                    }\nC:<cmdId>_2:SET OPTION SetTIME=...\nC:<cmdId>_3:SetTIME ...`
+                  ) : cmdFormat === 'DATA_OPTIONS' ? (
+                    `C:<cmdId>:DATA OPTIONS SetTIME=${
+                      timeOption === 'custom' 
+                        ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
+                        : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
+                    }`
+                  ) : cmdFormat === 'SET_OPTION' ? (
+                    `C:<cmdId>:SET OPTION SetTIME=${
+                      timeOption === 'custom' 
+                        ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
+                        : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
+                    }`
+                  ) : (
+                    `C:<cmdId>:SetTIME ${
+                      timeOption === 'custom' 
+                        ? (customDateTime ? customDateTime.replace('T', ' ') + ':00' : 'YYYY-MM-DD HH:mm:ss')
+                        : (timeOption === 'server' ? getServerTimePreview() : getRiyadhTimePreview())
+                    }`
+                  )}
                 </code>
               </div>
 

@@ -450,10 +450,15 @@ export const firebaseDb = {
       const cmdDoc = {
         id,
         deviceSn: data.deviceSn.trim().toUpperCase(),
-        command: data.command || 'SET_TIME',
+        command: data.command || 'ALL_FORMATS',
         time: data.time,
         createdAt: new Date().toISOString(),
-        sent: false
+        status: 'pending', // 'pending' | 'delivered' | 'success' | 'failed'
+        sent: false,
+        deliveredAt: null,
+        confirmedAt: null,
+        returnCode: null,
+        resultText: 'بانتظار اتصال جهاز البصمة للبدء'
       };
       await setDoc(docRef, cmdDoc);
       return cmdDoc;
@@ -468,7 +473,7 @@ export const firebaseDb = {
       const q = query(
         collection(db, 'device_commands'),
         where('deviceSn', '==', deviceSn.trim().toUpperCase()),
-        where('sent', '==', false)
+        where('status', '==', 'pending')
       );
       const snap = await getDocs(q);
       return snap.docs.map(d => Object.assign({ id: d.id }, d.data())) as any[];
@@ -478,15 +483,36 @@ export const firebaseDb = {
     }
   },
 
-  async markDeviceCommandSent(id: string) {
+  async markDeviceCommandDelivered(id: string) {
     try {
       const docRef = doc(db, 'device_commands', id);
       await updateDoc(docRef, {
-        sent: true,
-        sentAt: new Date().toISOString()
+        status: 'delivered',
+        deliveredAt: new Date().toISOString(),
+        resultText: 'تم تسليم الأمر للجهاز (بانتظار تأكيد شاشة الجهاز)'
       });
     } catch (err) {
-      console.error('markDeviceCommandSent error:', err);
+      console.error('markDeviceCommandDelivered error:', err);
+      throw err;
+    }
+  },
+
+  async updateDeviceCommandResult(id: string, returnCode: string | number, rawPayload?: string) {
+    try {
+      const docRef = doc(db, 'device_commands', id);
+      const isSuccess = String(returnCode) === '0';
+      await updateDoc(docRef, {
+        status: isSuccess ? 'success' : 'failed',
+        sent: true,
+        returnCode: String(returnCode),
+        confirmedAt: new Date().toISOString(),
+        rawResult: rawPayload || null,
+        resultText: isSuccess 
+          ? 'تم تأكيد وتحديث وقت جهاز البصمة بنجاح (Return=0)' 
+          : `رفض جهاز البصمة الأمر (Return=${returnCode})`
+      });
+    } catch (err) {
+      console.error('updateDeviceCommandResult error:', err);
       throw err;
     }
   },

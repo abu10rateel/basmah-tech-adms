@@ -1243,9 +1243,15 @@ async function startServer() {
           // If this is a command callback POST from devicecmd
           if (req.method === 'POST' && pathLower.includes('devicecmd')) {
             const cmdIdMatch = payloadText.match(/ID=([A-Za-z0-9_]+)/i) || (req.query.ID ? [null, req.query.ID as string] : null);
+            const retMatch = payloadText.match(/Return=(-?\d+)/i) || payloadText.match(/Result=(-?\d+)/i) || (req.query.Return ? [null, req.query.Return as string] : null);
+
             if (cmdIdMatch && cmdIdMatch[1]) {
-              console.log(`[ZK ADMS] Received execution callback for command ID: ${cmdIdMatch[1]} from SN: ${sn}`);
-              await firebaseDb.markDeviceCommandSent(cmdIdMatch[1]);
+              const rawCmdId = cmdIdMatch[1];
+              const baseCmdId = rawCmdId.replace(/_[234]$/, '');
+              const returnCode = retMatch ? retMatch[1] : '0';
+
+              console.log(`[ZK ADMS Callback] Command ID: ${baseCmdId} (raw: ${rawCmdId}), ReturnCode: ${returnCode} from SN: ${sn}`);
+              await firebaseDb.updateDeviceCommandResult(baseCmdId, returnCode, payloadText);
             }
             res.status(200);
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -1259,14 +1265,27 @@ async function startServer() {
               console.log(`[ZK ADMS] Delivering ${pendingCmds.length} pending command(s) to SN: ${sn}`);
               let commandResponseText = '';
               for (const c of pendingCmds) {
-                let cmdStr = c.command || 'SET_TIME';
-                if (cmdStr === 'SET_TIME' || cmdStr === 'SET TIME') {
-                  cmdStr = `SET TIME ${c.time}`;
-                }
-                commandResponseText += `C:${c.id}:${cmdStr}\r\n`;
+                const cmdFormat = c.command || 'ALL_FORMATS';
 
-                // Immediately mark as sent so it is delivered ONCE
-                await firebaseDb.markDeviceCommandSent(c.id);
+                if (cmdFormat === 'ALL_FORMATS' || cmdFormat === 'SET_TIME') {
+                  // Output all 4 standard ZKTeco ADMS variations in one command response block
+                  // This ensures M2000 and any firmware version parses and applies the time!
+                  commandResponseText += `C:${c.id}:DATA OPTIONS SetTIME=${c.time}\r\n`;
+                  commandResponseText += `C:${c.id}_2:SET OPTION SetTIME=${c.time}\r\n`;
+                  commandResponseText += `C:${c.id}_3:SetTIME ${c.time}\r\n`;
+                  commandResponseText += `C:${c.id}_4:SET TIME ${c.time}\r\n`;
+                } else if (cmdFormat === 'DATA_OPTIONS') {
+                  commandResponseText += `C:${c.id}:DATA OPTIONS SetTIME=${c.time}\r\n`;
+                } else if (cmdFormat === 'SET_OPTION') {
+                  commandResponseText += `C:${c.id}:SET OPTION SetTIME=${c.time}\r\n`;
+                } else if (cmdFormat === 'DIRECT_SET_TIME') {
+                  commandResponseText += `C:${c.id}:SetTIME ${c.time}\r\n`;
+                } else {
+                  commandResponseText += `C:${c.id}:DATA OPTIONS SetTIME=${c.time}\r\n`;
+                }
+
+                // Mark as delivered to device
+                await firebaseDb.markDeviceCommandDelivered(c.id);
               }
 
               res.status(200);
@@ -1582,7 +1601,7 @@ async function startServer() {
         return res.status(401).json({ error: 'غير مصرح بالدخول' });
       }
 
-      const { deviceSn, timeType, customTime } = req.body;
+      const { deviceSn, timeType, customTime, cmdFormat } = req.body;
       if (!deviceSn) {
         return res.status(400).json({ error: 'الرقم التسلسلي للجهاز مطلوب.' });
       }
@@ -1615,7 +1634,7 @@ async function startServer() {
       const newCommand = await firebaseDb.createDeviceCommand({
         deviceSn,
         time: timeStr,
-        command: 'SET_TIME'
+        command: cmdFormat || 'ALL_FORMATS'
       });
 
       console.log(`[Device Time Sync] Created SET_TIME command for SN: ${deviceSn} with time: ${timeStr}`);

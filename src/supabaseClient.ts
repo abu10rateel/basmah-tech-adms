@@ -614,7 +614,8 @@ export const db = {
   async syncDeviceTime(
     deviceSn: string, 
     timeType: 'server' | 'riyadh' | 'custom', 
-    customTime?: string
+    customTime?: string,
+    cmdFormat?: string
   ): Promise<{ success: boolean; command?: any; error?: any }> {
     const user = await this.getCurrentUser();
     if (!user) return { success: false, error: 'غير مصرح بالدخول' };
@@ -625,7 +626,7 @@ export const db = {
           'Content-Type': 'application/json',
           'x-user-id': user.id
         },
-        body: JSON.stringify({ deviceSn, timeType, customTime })
+        body: JSON.stringify({ deviceSn, timeType, customTime, cmdFormat })
       });
       const parsed = await safeFetchJson(response);
       const result = parsed.data || {};
