@@ -90,11 +90,17 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "userId": { "type": "string" },
         "deviceSn": { "type": "string" },
         "command": { "type": "string" },
         "time": { "type": "string" },
         "createdAt": { "type": "string" },
-        "sent": { "type": "boolean" }
+        "sent": { "type": "boolean" },
+        "status": { "type": "string" },
+        "deliveredAt": { "type": "string" },
+        "confirmedAt": { "type": "string" },
+        "returnCode": { "type": "string" },
+        "resultText": { "type": "string" }
       },
       "required": ["id", "deviceSn", "command", "time", "createdAt", "sent"]
     },

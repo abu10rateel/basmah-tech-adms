@@ -443,7 +443,7 @@ export const firebaseDb = {
   },
 
   // --- DEVICE COMMANDS ---
-  async createDeviceCommand(data: { deviceSn: string; command?: string; time: string }) {
+  async createDeviceCommand(data: { deviceSn: string; command?: string; time: string; userId?: string }) {
     try {
       const id = `cmd_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
       const docRef = doc(db, 'device_commands', id);
@@ -452,6 +452,7 @@ export const firebaseDb = {
         deviceSn: data.deviceSn.trim().toUpperCase(),
         command: data.command || 'ALL_FORMATS',
         time: data.time,
+        userId: data.userId || null,
         createdAt: new Date().toISOString(),
         status: 'pending', // 'pending' | 'delivered' | 'success' | 'failed'
         sent: false,
@@ -517,19 +518,29 @@ export const firebaseDb = {
     }
   },
 
-  async getDeviceCommands(deviceSn?: string) {
+  async getDeviceCommands(userId?: string, deviceSn?: string) {
     try {
-      let q;
-      if (deviceSn) {
-        q = query(
-          collection(db, 'device_commands'),
-          where('deviceSn', '==', deviceSn.trim().toUpperCase())
-        );
-      } else {
-        q = query(collection(db, 'device_commands'));
+      const snap = await getDocs(collection(db, 'device_commands'));
+      let list = snap.docs.map(d => Object.assign({ id: d.id }, d.data())) as any[];
+
+      if (userId) {
+        // Get serial numbers belonging to this tenant's devices
+        const tenantDevices = await this.getDevices(userId);
+        const userSns = new Set(tenantDevices.map(d => (d.serial_number || '').trim().toUpperCase()));
+
+        list = list.filter(cmd => {
+          if (cmd.userId && cmd.userId === userId) return true;
+          if (cmd.deviceSn && userSns.has(cmd.deviceSn.trim().toUpperCase())) return true;
+          return false;
+        });
       }
-      const snap = await getDocs(q);
-      return snap.docs.map(d => Object.assign({ id: d.id }, d.data())) as any[];
+
+      if (deviceSn) {
+        const targetSn = deviceSn.trim().toUpperCase();
+        list = list.filter(cmd => (cmd.deviceSn || '').trim().toUpperCase() === targetSn);
+      }
+
+      return list;
     } catch (err) {
       console.error('getDeviceCommands error:', err);
       throw err;

@@ -1547,7 +1547,7 @@ async function startServer() {
       }
 
       const tenantDevices = await firebaseDb.getDevices(userId);
-      const allCommands = await firebaseDb.getDeviceCommands();
+      const allCommands = await firebaseDb.getDeviceCommands(userId);
 
       const now = new Date();
       const enriched = tenantDevices.map((device: any) => {
@@ -1634,10 +1634,11 @@ async function startServer() {
       const newCommand = await firebaseDb.createDeviceCommand({
         deviceSn,
         time: timeStr,
-        command: cmdFormat || 'ALL_FORMATS'
+        command: cmdFormat || 'ALL_FORMATS',
+        userId
       });
 
-      console.log(`[Device Time Sync] Created SET_TIME command for SN: ${deviceSn} with time: ${timeStr}`);
+      console.log(`[Device Time Sync] Created SET_TIME command for SN: ${deviceSn} with time: ${timeStr} for user: ${userId}`);
 
       res.json({ success: true, command: newCommand });
     } catch (err) {
@@ -1655,7 +1656,7 @@ async function startServer() {
       }
 
       const { deviceSn } = req.query;
-      const commands = await firebaseDb.getDeviceCommands(deviceSn as string);
+      const commands = await firebaseDb.getDeviceCommands(userId, deviceSn as string);
       commands.sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 
       res.json(commands);
