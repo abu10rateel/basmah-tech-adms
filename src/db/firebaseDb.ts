@@ -502,6 +502,16 @@ export const firebaseDb = {
     try {
       const docRef = doc(db, 'device_commands', id);
       const isSuccess = String(returnCode) === '0';
+
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const currentData = docSnap.data();
+        if (currentData.status === 'success' && !isSuccess) {
+          console.log(`[DeviceCommandResult] Command ${id} already succeeded. Ignoring returnCode ${returnCode} from secondary variant.`);
+          return;
+        }
+      }
+
       await updateDoc(docRef, {
         status: isSuccess ? 'success' : 'failed',
         sent: true,

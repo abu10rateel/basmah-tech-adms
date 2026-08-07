@@ -1266,20 +1266,33 @@ async function startServer() {
               let commandResponseText = '';
               for (const c of pendingCmds) {
                 const cmdFormat = c.command || 'ALL_FORMATS';
+                // Calculate Unix timestamp in seconds
+                let unixSec = Math.floor(Date.now() / 1000);
+                try {
+                  const parsedDate = new Date(c.time.replace(' ', 'T'));
+                  if (!isNaN(parsedDate.getTime())) {
+                    unixSec = Math.floor(parsedDate.getTime() / 1000);
+                  }
+                } catch {
+                  // fallback
+                }
 
-                if (cmdFormat === 'DATA_OPTION' || cmdFormat === 'ALL_FORMATS' || cmdFormat === 'SET_TIME') {
-                  // Official ZKTeco Push SDK ADMS parameter setting command (DATA OPTION singular)
-                  commandResponseText += `C:${c.id}:DATA OPTION SetTIME=${c.time}\r\n`;
-                } else if (cmdFormat === 'SET_OPTION') {
-                  commandResponseText += `C:${c.id}:SET OPTION SetTIME=${c.time}\r\n`;
-                } else if (cmdFormat === 'SET_TIME_EQUAL') {
-                  commandResponseText += `C:${c.id}:SetTIME=${c.time}\r\n`;
-                } else if (cmdFormat === 'SET_TIME_SPACE' || cmdFormat === 'DIRECT_SET_TIME') {
-                  commandResponseText += `C:${c.id}:SetTIME ${c.time}\r\n`;
-                } else if (cmdFormat === 'SET_TIME_CAPS') {
-                  commandResponseText += `C:${c.id}:SET TIME ${c.time}\r\n`;
+                if (cmdFormat === 'ALL_FORMATS') {
+                  // Official ZKTeco Push SDK ADMS DateTime parameter variations
+                  commandResponseText += `C:${c.id}:SET OPTIONS DateTime=${c.time}\r\n`;
+                  commandResponseText += `C:${c.id}_2:SET OPTIONS DateTime=${unixSec}\r\n`;
+                  commandResponseText += `C:${c.id}_3:SET OPTION DateTime=${c.time}\r\n`;
+                  commandResponseText += `C:${c.id}_4:SET OPTIONS DT_SetTime=${c.time}\r\n`;
+                } else if (cmdFormat === 'SET_OPTIONS_DATETIME') {
+                  commandResponseText += `C:${c.id}:SET OPTIONS DateTime=${c.time}\r\n`;
+                } else if (cmdFormat === 'SET_OPTIONS_DATETIME_UNIX') {
+                  commandResponseText += `C:${c.id}:SET OPTIONS DateTime=${unixSec}\r\n`;
+                } else if (cmdFormat === 'SET_OPTION_DATETIME') {
+                  commandResponseText += `C:${c.id}:SET OPTION DateTime=${c.time}\r\n`;
+                } else if (cmdFormat === 'SET_OPTIONS_DT_SETTIME') {
+                  commandResponseText += `C:${c.id}:SET OPTIONS DT_SetTime=${c.time}\r\n`;
                 } else {
-                  commandResponseText += `C:${c.id}:DATA OPTION SetTIME=${c.time}\r\n`;
+                  commandResponseText += `C:${c.id}:SET OPTIONS DateTime=${c.time}\r\n`;
                 }
 
                 // Mark as delivered to device
@@ -1297,8 +1310,16 @@ async function startServer() {
           return res.send('OK');
         }
 
-        // GET request: Return standard ZKTeco ADMS handshake config options ending with OK (NO ServerTime/TimeZone/TZ to respect manual hardware clock setting)
+        // GET request: Return standard ZKTeco ADMS handshake config options
         if (req.method === 'GET') {
+          let serverTimeHeader = '';
+          if (sn) {
+            const pendingCmds = await firebaseDb.getPendingDeviceCommands(sn);
+            if (pendingCmds && pendingCmds.length > 0 && pendingCmds[0].time) {
+              serverTimeHeader = `ServerTime=${pendingCmds[0].time}\r\n`;
+            }
+          }
+
           const responseConfig =
             `GET OPTION FROM: ${sn || 'device'}\r\n` +
             `Stamp=9999\r\n` +
@@ -1310,6 +1331,7 @@ async function startServer() {
             `TransFlag=1111111111\r\n` +
             `Realtime=1\r\n` +
             `Encrypt=0\r\n` +
+            serverTimeHeader +
             `OK\r\n`;
 
           res.status(200);
