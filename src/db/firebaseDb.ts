@@ -565,5 +565,87 @@ export const firebaseDb = {
       console.error('deleteDeviceCommand error:', err);
       throw err;
     }
+  },
+
+  // --- PUSH NOTIFICATION SUBSCRIPTIONS ---
+  async savePushSubscription(data: {
+    id?: string;
+    userId: string;
+    endpoint?: string;
+    fcmToken?: string;
+    subscriptionJson?: string;
+    userAgent?: string;
+    deviceName?: string;
+  }) {
+    try {
+      // Find existing subscription with same endpoint or fcmToken to avoid duplicate records
+      const identifier = data.endpoint || data.fcmToken;
+      const subId = data.id || (identifier 
+        ? `sub_${Buffer.from(identifier).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 32)}`
+        : `sub_${Date.now()}_${Math.floor(Math.random() * 1000)}`);
+      
+      const docRef = doc(db, 'push_subscriptions', subId);
+      const subDoc = {
+        id: subId,
+        userId: data.userId,
+        endpoint: data.endpoint || '',
+        fcmToken: data.fcmToken || '',
+        subscriptionJson: data.subscriptionJson || '',
+        userAgent: data.userAgent || '',
+        deviceName: data.deviceName || 'Admin Device',
+        lastActive: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(docRef, subDoc, { merge: true });
+      return subDoc;
+    } catch (err) {
+      console.error('savePushSubscription error:', err);
+      throw err;
+    }
+  },
+
+  async getPushSubscriptions(userId?: string) {
+    try {
+      let q;
+      if (userId) {
+        q = query(collection(db, 'push_subscriptions'), where('userId', '==', userId));
+      } else {
+        q = collection(db, 'push_subscriptions');
+      }
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...(d.data() as Record<string, any>) })) as any[];
+    } catch (err) {
+      console.error('getPushSubscriptions error:', err);
+      return [];
+    }
+  },
+
+  async deletePushSubscription(id: string) {
+    try {
+      const docRef = doc(db, 'push_subscriptions', id);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.error('deletePushSubscription error:', err);
+    }
+  },
+
+  async deletePushSubscriptionByIdentifier(identifier: string) {
+    try {
+      const snap = await getDocs(collection(db, 'push_subscriptions'));
+      const batch = writeBatch(db);
+      let count = 0;
+      snap.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.endpoint === identifier || data.fcmToken === identifier) {
+          batch.delete(docSnap.ref);
+          count++;
+        }
+      });
+      if (count > 0) {
+        await batch.commit();
+      }
+    } catch (err) {
+      console.error('deletePushSubscriptionByIdentifier error:', err);
+    }
   }
 };

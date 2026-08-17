@@ -14,8 +14,10 @@ import ReportingEngine from './components/ReportingEngine';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 import DeviceTimeManager from './components/DeviceTimeManager';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import PushNotificationManager, { LivePunchToast } from './components/PushNotificationManager';
 import { db } from './supabaseClient';
-import { LogOut, UserCheck, Users, Clock, BarChart3, Database, Building2, Calendar, AlertTriangle, ShieldAlert, AlertCircle, MessageSquare, ExternalLink } from 'lucide-react';
+import { pushClient } from './lib/pushClient';
+import { LogOut, UserCheck, Users, Clock, BarChart3, Database, Building2, Calendar, AlertTriangle, ShieldAlert, AlertCircle, MessageSquare, ExternalLink, Bell, BellRing } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 
 export default function App() {
@@ -23,12 +25,26 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'attendance' | 'reports' | 'employees' | 'shifts' | 'deviceTime'>('attendance');
+  const [showPushModal, setShowPushModal] = useState(false);
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+
+  const checkPush = async () => {
+    try {
+      const s = await pushClient.checkStatus();
+      setIsPushSubscribed(s.subscribed);
+    } catch (e) {
+      console.warn('Error checking push status:', e);
+    }
+  };
 
   useEffect(() => {
     // Listen to session state change (Handles both Supabase and Local fallback modes seamlessly)
     const unsubscribe = db.onAuthStateChange((currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
+      if (currentUser && !currentUser.is_super_admin) {
+        checkPush();
+      }
     });
 
     return () => {
@@ -178,13 +194,36 @@ export default function App() {
             </div>
           </div>
 
-          {/* Operations Controls & Logout */}
+          {/* Operations Controls, Push Notifications & Logout */}
           <div className="flex items-center gap-2 self-end sm:self-auto">
             
+            {/* Push Notifications Status & Trigger Button */}
+            <button
+              onClick={() => setShowPushModal(true)}
+              className={`px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-black flex items-center gap-1.5 border transition cursor-pointer ${
+                isPushSubscribed
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 shadow-sm shadow-emerald-500/10'
+                  : 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25 animate-pulse'
+              }`}
+              title="إدارة الإشعارات الفورية للبصمة"
+            >
+              {isPushSubscribed ? (
+                <BellRing className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              ) : (
+                <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              )}
+              <span className="hidden sm:inline">
+                {isPushSubscribed ? 'الإشعارات الفورية نشطة' : 'تفعيل إشعارات البصمة'}
+              </span>
+              <span className="sm:hidden">
+                {isPushSubscribed ? 'الإشعارات' : 'تفعيل'}
+              </span>
+            </button>
+
             {/* Cloud Connected Badge */}
-            <div className="px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold flex items-center gap-1.5 border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
+            <div className="hidden md:flex px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold items-center gap-1.5 border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
               <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              <span>البوابة السحابية الموحدة</span>
+              <span>البوابة السحابية</span>
             </div>
 
             {/* Logout */}
@@ -198,6 +237,17 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* Push Notification Manager Modal & Foreground Live Punch Toast */}
+      <PushNotificationManager
+        user={user}
+        isOpen={showPushModal}
+        onClose={() => {
+          setShowPushModal(false);
+          checkPush();
+        }}
+      />
+      <LivePunchToast />
 
       {/* Navigation Tabs (Operational Views only) */}
       {!subStatus.isExpired && (

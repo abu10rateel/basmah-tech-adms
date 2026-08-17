@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { firebaseDb } from './src/db/firebaseDb';
 import { generateInvoicePdf, sendEmailWithAttachment, sendHtmlEmail, generatePasswordResetEmailHtml } from './src/lib/mailService';
+import { pushService } from './src/lib/pushService';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
@@ -74,9 +75,11 @@ async function startServer() {
   });
 
   // Explicit PWA Static Endpoints for Service Worker, Manifest, and Icons
-  app.get(['/sw.js', '/service-worker.js', '/registerSW.js'], (req, res) => {
-    const swPath = path.join(process.cwd(), 'public', 'sw.js');
-    const distSwPath = path.join(process.cwd(), 'dist', 'sw.js');
+  app.get(['/sw.js', '/service-worker.js', '/registerSW.js', '/firebase-messaging-sw.js'], (req, res) => {
+    let filename = req.path.replace(/^\//, '');
+    if (!filename || filename === 'registerSW.js') filename = 'sw.js';
+    const swPath = path.join(process.cwd(), 'public', filename);
+    const distSwPath = path.join(process.cwd(), 'dist', filename);
     const targetPath = fs.existsSync(distSwPath) ? distSwPath : swPath;
 
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
@@ -85,8 +88,29 @@ async function startServer() {
     if (fs.existsSync(targetPath)) {
       res.sendFile(targetPath);
     } else {
-      res.status(404).send('Service Worker not found');
+      // Fallback to sw.js if firebase-messaging-sw.js not found
+      const fallback = path.join(process.cwd(), 'public', 'sw.js');
+      if (fs.existsSync(fallback)) {
+        res.sendFile(fallback);
+      } else {
+        res.status(404).send('Service Worker not found');
+      }
     }
+  });
+
+  // Audio Notification sound endpoint
+  app.get(['/notification.mp3', '/notification.wav', '/static/notification.mp3'], (req, res) => {
+    const audioPath = path.join(process.cwd(), 'public', 'notification.mp3');
+    const distAudioPath = path.join(process.cwd(), 'dist', 'notification.mp3');
+    const targetPath = fs.existsSync(distAudioPath) ? distAudioPath : audioPath;
+
+    if (fs.existsSync(targetPath)) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.sendFile(targetPath);
+    }
+    res.status(404).send('Audio not found');
   });
 
   app.get(['/manifest.json', '/manifest.webmanifest'], (req, res) => {
@@ -138,6 +162,98 @@ async function startServer() {
   });
 
   // --- API ROUTES FIRST ---
+
+  // Push Notifications: Get Public VAPID Key
+  app.get('/api/notifications/vapid-key', (req, res) => {
+    try {
+      const publicKey = pushService.getVapidPublicKey();
+      res.json({ publicKey, success: true });
+    } catch (err) {
+      console.error('Error fetching VAPID key:', err);
+      res.status(500).json({ error: 'Failed to retrieve push public key' });
+    }
+  });
+
+  // Push Notifications: Subscribe Admin Device
+  app.post('/api/notifications/subscribe', async (req, res) => {
+    try {
+      const { userId, endpoint, fcmToken, subscriptionJson, userAgent, deviceName } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: 'معرف المستخدم (Admin) مطلوب لتسجيل الإشعارات.' });
+      }
+
+      const subscription = await pushService.subscribeAdmin({
+        userId,
+        endpoint,
+        fcmToken,
+        subscriptionJson,
+        userAgent,
+        deviceName
+      });
+
+      console.log(`[Push API] Registered new push device subscription for user ${userId} (${deviceName})`);
+      res.json({ success: true, subscription });
+    } catch (err: any) {
+      console.error('[Push API] Subscribe error:', err);
+      res.status(500).json({ error: err.message || 'حدث خطأ أثناء تسجيل الإشعارات' });
+    }
+  });
+
+  // Push Notifications: Unsubscribe Admin Device
+  app.post('/api/notifications/unsubscribe', async (req, res) => {
+    try {
+      const { endpoint, fcmToken } = req.body;
+      if (endpoint || fcmToken) {
+        await pushService.unsubscribeAdmin(endpoint || fcmToken);
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[Push API] Unsubscribe error:', err);
+      res.status(500).json({ error: err.message || 'حدث خطأ أثناء إلغاء الإشعارات' });
+    }
+  });
+
+  // Push Notifications: Send Test Notification
+  app.post('/api/notifications/test', async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: 'معرف المشرف مطلوب.' });
+      }
+
+      const currentTime = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      const testPayload = {
+        title: '🔔 بصمة تك: تجربة وصول الإشعار الفوري',
+        body: `تم اختبار وصول إشعار الحضور الفوري بنجاح لهاتفك في تمام الساعة ${currentTime}. يعمل النظام بشكل حقيقي!`,
+        icon: '/icon-192.png',
+        badge: '/favicon.png',
+        sound: '/notification.mp3',
+        tag: `test-punch-${Date.now()}`,
+        data: {
+          url: '/',
+          test: true,
+          time: currentTime
+        }
+      };
+
+      const result = await pushService.sendNotificationToUser(userId, testPayload);
+      if (result.sentCount === 0 && result.total === 0) {
+        return res.status(400).json({
+          error: 'لم يتم العثور على أجهزة مسجلة لهذا الحساب. يرجى تفعيل إذن الإشعارات من هذا الجهاز أولاً.'
+        });
+      }
+
+      res.json({
+        success: true,
+        sentCount: result.sentCount,
+        total: result.total,
+        message: `تم إرسال الإشعار الفوري بنجاح إلى ${result.sentCount} من أجهزتك المسجلة!`
+      });
+    } catch (err: any) {
+      console.error('[Push API] Test error:', err);
+      res.status(500).json({ error: err.message || 'فشل إرسال الإشعار التجريبي' });
+    }
+  });
 
   // Auth: Sign Up
   app.post('/api/auth/signup', async (req, res) => {
@@ -1415,6 +1531,16 @@ async function startServer() {
                   synced: false
                 });
                 count++;
+
+                // Trigger Instant Real-time Push Notification to Admin
+                pushService.sendPunchPushNotification({
+                  sn: sn || 'UNKNOWN_SN',
+                  pin,
+                  timestamp,
+                  status
+                }).catch(pushErr => {
+                  console.error('[ZK ADMS] Push Notification Error:', pushErr);
+                });
               }
             }
           }

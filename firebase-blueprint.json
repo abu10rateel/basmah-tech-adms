@@ -118,12 +118,33 @@
         "synced": { "type": "boolean" }
       },
       "required": ["id", "sn", "pin", "timestamp", "status", "created_at", "synced"]
+    },
+    "PushSubscription": {
+      "title": "PushSubscription",
+      "description": "FCM and Web Push subscription credentials for admin devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "fcmToken": { "type": "string" },
+        "subscriptionJson": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "deviceName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastActive": { "type": "string" }
+      },
+      "required": ["id", "userId", "createdAt"]
     }
   },
   "firestore": {
     "/tenants/{tenantId}": {
       "schema": "Tenant",
       "description": "Tenant Profiles Collection"
+    },
+    "/push_subscriptions/{subscriptionId}": {
+      "schema": "PushSubscription",
+      "description": "Admin Push Subscriptions Collection"
     },
     "/shifts/{shiftId}": {
       "schema": "Shift",
