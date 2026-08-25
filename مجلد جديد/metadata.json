@@ -1,0 +1,6 @@
+{
+  "name": "نظام بصمة تك للحضور والشيفتات",
+  "description": "نظام الحضور والانصراف السحابي الذكي، الشيفتات المزدوجة، والإشعارات الفورية للبصمة - بصمة تك",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

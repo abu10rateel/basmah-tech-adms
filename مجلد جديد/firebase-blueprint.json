@@ -1,0 +1,174 @@
+{
+  "entities": {
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Tenant account profile in the attendance management system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "company_name": { "type": "string" }
+      },
+      "required": ["id", "email", "password", "company_name"]
+    },
+    "Shift": {
+      "title": "Shift",
+      "description": "Shift schedule details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["single", "dual"] },
+        "shift1_start": { "type": "string" },
+        "shift1_end": { "type": "string" },
+        "shift2_start": { "type": "string" },
+        "shift2_end": { "type": "string" },
+        "grace_minutes": { "type": "number" },
+        "overtime_threshold_minutes": { "type": "number" },
+        "checkin_start": { "type": "string" },
+        "checkin_end": { "type": "string" },
+        "checkout_start": { "type": "string" },
+        "checkout_end": { "type": "string" },
+        "checkin2_start": { "type": "string" },
+        "checkin2_end": { "type": "string" },
+        "checkout2_start": { "type": "string" },
+        "checkout2_end": { "type": "string" }
+      },
+      "required": ["id", "user_id", "name", "type", "shift1_start", "shift1_end", "grace_minutes", "overtime_threshold_minutes"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Employee profiles in a tenant workspace",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "emp_id": { "type": "string" },
+        "name": { "type": "string" },
+        "department": { "type": "string" },
+        "phone": { "type": "string" },
+        "shift_schedule_id": { "type": "string" },
+        "is_dual_shift": { "type": "boolean" }
+      },
+      "required": ["id", "user_id", "emp_id", "name", "shift_schedule_id", "is_dual_shift"]
+    },
+    "AttendanceLog": {
+      "title": "AttendanceLog",
+      "description": "Daily attendance punch record for employees",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "employee_id": { "type": "string" },
+        "date": { "type": "string" },
+        "shift1_check_in": { "type": "string" },
+        "shift1_check_out": { "type": "string" },
+        "shift2_check_in": { "type": "string" },
+        "shift2_check_out": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "user_id", "employee_id", "date"]
+    },
+    "Device": {
+      "title": "Device",
+      "description": "Registered hardware devices in ADMS system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "serial_number": { "type": "string" },
+        "name": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "user_id", "serial_number", "name"]
+    },
+    "DeviceCommand": {
+      "title": "DeviceCommand",
+      "description": "Queued commands for ZKTeco ADMS hardware devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "deviceSn": { "type": "string" },
+        "command": { "type": "string" },
+        "time": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "sent": { "type": "boolean" },
+        "status": { "type": "string" },
+        "deliveredAt": { "type": "string" },
+        "confirmedAt": { "type": "string" },
+        "returnCode": { "type": "string" },
+        "resultText": { "type": "string" }
+      },
+      "required": ["id", "deviceSn", "command", "time", "createdAt", "sent"]
+    },
+    "ZkRawLog": {
+      "title": "ZkRawLog",
+      "description": "Raw fingerprint punch parsed from ADMS devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sn": { "type": "string" },
+        "pin": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "status": { "type": "number" },
+        "created_at": { "type": "string" },
+        "synced": { "type": "boolean" }
+      },
+      "required": ["id", "sn", "pin", "timestamp", "status", "created_at", "synced"]
+    },
+    "PushSubscription": {
+      "title": "PushSubscription",
+      "description": "FCM and Web Push subscription credentials for admin devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "fcmToken": { "type": "string" },
+        "subscriptionJson": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "deviceName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastActive": { "type": "string" }
+      },
+      "required": ["id", "userId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "Tenant Profiles Collection"
+    },
+    "/push_subscriptions/{subscriptionId}": {
+      "schema": "PushSubscription",
+      "description": "Admin Push Subscriptions Collection"
+    },
+    "/shifts/{shiftId}": {
+      "schema": "Shift",
+      "description": "Shifts Collection"
+    },
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Employees Collection"
+    },
+    "/attendance_logs/{logId}": {
+      "schema": "AttendanceLog",
+      "description": "Attendance Logs Collection"
+    },
+    "/devices/{deviceId}": {
+      "schema": "Device",
+      "description": "Devices Collection"
+    },
+    "/device_commands/{cmdId}": {
+      "schema": "DeviceCommand",
+      "description": "ZKTeco Device Commands Collection"
+    },
+    "/zk_raw_logs/{rawLogId}": {
+      "schema": "ZkRawLog",
+      "description": "ADMS Raw Logs Collection"
+    }
+  }
+}

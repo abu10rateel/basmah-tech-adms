@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <title>نظام بصمة تك لإدارة البصمات والحضور</title>
+    <!-- PWA & Mobile Standalone Meta Tags -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="بصمة تك" />
+    <meta name="theme-color" content="#020617" />
+    <meta name="application-name" content="بصمة تك" />
+
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
+
+    <!-- Service Worker Auto-Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        function registerServiceWorker() {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(function(reg) {
+              console.log('[PWA] Service Worker registered successfully with scope:', reg.scope);
+            })
+            .catch(function(err) {
+              console.error('[PWA] Service Worker registration failed:', err);
+            });
+        }
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+          registerServiceWorker();
+        } else {
+          window.addEventListener('load', registerServiceWorker);
+        }
+      }
+    </script>
+  </head>
+  <body class="bg-slate-950 text-slate-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
