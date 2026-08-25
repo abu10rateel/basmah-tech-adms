@@ -22,6 +22,7 @@ import {
   Info, 
   Cpu, 
   ShieldCheck,
+  ShieldAlert,
   Check,
   X
 } from 'lucide-react';
@@ -34,6 +35,8 @@ interface DeviceItem {
   is_online: boolean;
   estimated_time: string;
   pending_command?: any;
+  is_exempt_from_time_sync?: boolean;
+  disable_time_sync?: boolean;
 }
 
 export default function DeviceTimeManager() {
@@ -42,6 +45,7 @@ export default function DeviceTimeManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [togglingSN, setTogglingSN] = useState<string | null>(null);
 
   // Sync Modal State
   const [selectedDevice, setSelectedDevice] = useState<DeviceItem | null>(null);
@@ -62,6 +66,7 @@ export default function DeviceTimeManager() {
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [newSn, setNewSn] = useState('');
   const [newName, setNewName] = useState('');
+  const [newIsLegacy, setNewIsLegacy] = useState(false);
   const [registering, setRegistering] = useState(false);
 
   const loadData = async () => {
@@ -87,6 +92,31 @@ export default function DeviceTimeManager() {
     const interval = setInterval(loadData, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleToggleExemption = async (dev: DeviceItem) => {
+    const newExemptState = !(dev.is_exempt_from_time_sync || dev.disable_time_sync);
+    setTogglingSN(dev.serial_number);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await db.toggleDeviceTimeSyncExemption(dev.serial_number, newExemptState);
+      if (res.success) {
+        setSuccess(
+          newExemptState 
+            ? `تم تفعيل وضع الحماية للجهاز (${dev.serial_number}). لن يرسل السيرفر أي أوامر وقت أو استجابة توقيت لهذا الجهاز.`
+            : `تم إلغاء استثناء الجهاز (${dev.serial_number}). أصبح بالإمكان إرسال أوامر ضبط الوقت للجهاز طبيعياً.`
+        );
+        await loadData();
+      } else {
+        setError(res.error || 'فشل تحديث حالة الاستثناء للجهاز.');
+      }
+    } catch (err: any) {
+      setError('حدث خطأ أثناء تعديل حالة الحماية.');
+    } finally {
+      setTogglingSN(null);
+    }
+  };
 
   const handleOpenSyncModal = (dev: DeviceItem) => {
     setSelectedDevice(dev);
@@ -151,9 +181,13 @@ export default function DeviceTimeManager() {
     try {
       const res = await db.registerDevice(newSn.trim(), newName.trim());
       if (res.success) {
+        if (newIsLegacy) {
+          await db.toggleDeviceTimeSyncExemption(newSn.trim(), true);
+        }
         setSuccess(`تم تسجيل الجهاز ${newName} بالرقم التسلسلي ${newSn} بنجاح.`);
         setNewSn('');
         setNewName('');
+        setNewIsLegacy(false);
         setShowAddDevice(false);
         await loadData();
       } else {
@@ -300,81 +334,124 @@ export default function DeviceTimeManager() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {devices.map((dev) => (
-              <div 
-                key={dev.id} 
-                className={`bg-slate-900 border rounded-2xl p-5 space-y-4 transition-all duration-300 relative overflow-hidden ${
-                  dev.is_online 
-                    ? 'border-emerald-500/30 shadow-lg shadow-emerald-950/10' 
-                    : 'border-slate-800 opacity-90'
-                }`}
-              >
-                {/* Device Title & Status */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <h4 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
-                      <span>{dev.name}</span>
-                    </h4>
-                    <p className="text-xs text-slate-400 font-mono font-semibold">
-                      SN: <span className="text-emerald-400">{dev.serial_number}</span>
-                    </p>
+            {devices.map((dev) => {
+              const isExempt = Boolean(dev.is_exempt_from_time_sync || dev.disable_time_sync);
+              const isToggling = togglingSN === dev.serial_number;
+
+              return (
+                <div 
+                  key={dev.id} 
+                  className={`bg-slate-900 border rounded-2xl p-5 space-y-4 transition-all duration-300 relative overflow-hidden ${
+                    isExempt
+                      ? 'border-indigo-500/40 shadow-lg shadow-indigo-950/20'
+                      : dev.is_online 
+                        ? 'border-emerald-500/30 shadow-lg shadow-emerald-950/10' 
+                        : 'border-slate-800 opacity-90'
+                  }`}
+                >
+                  {/* Device Title & Status */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <h4 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                        <span>{dev.name}</span>
+                      </h4>
+                      <p className="text-xs text-slate-400 font-mono font-semibold">
+                        SN: <span className="text-emerald-400">{dev.serial_number}</span>
+                      </p>
+                    </div>
+
+                    {/* Online Badge */}
+                    <div className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 border shrink-0 ${
+                      dev.is_online 
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                        : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                    }`}>
+                      {dev.is_online ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>متصل الآن</span>
+                        </>
+                      ) : (
+                        <>
+                          <WifiOff className="w-3 h-3" />
+                          <span>غير متصل</span>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Online Badge */}
-                  <div className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 border shrink-0 ${
-                    dev.is_online 
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
-                      : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                  }`}>
-                    {dev.is_online ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        <span>متصل الآن</span>
-                      </>
-                    ) : (
-                      <>
-                        <WifiOff className="w-3 h-3" />
-                        <span>غير متصل</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Details list */}
-                <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-2 text-xs">
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>آخر اتصال بالخادم:</span>
-                    <span className="font-semibold text-slate-200">{formatLastPing(dev.last_ping)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>التوقيت المتوقع حالياً:</span>
-                    <span className="font-mono font-semibold text-emerald-400 text-[11px] dir-ltr">{dev.estimated_time}</span>
-                  </div>
-
-                  {dev.pending_command ? (
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-amber-400 text-[11px] font-bold">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 animate-spin" />
-                        أمر تغيير الوقت معلق:
-                      </span>
-                      <span className="font-mono text-slate-200">{dev.pending_command.time}</span>
+                  {/* Exemption Protection Banner */}
+                  {isExempt ? (
+                    <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl flex items-center gap-2 text-xs text-indigo-300">
+                      <ShieldAlert className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <span className="font-bold">جهاز محمي (استثناء التوقيت مفعل)</span>
                     </div>
                   ) : null}
-                </div>
 
-                {/* Action Button */}
-                <div className="pt-1">
-                  <button
-                    onClick={() => handleOpenSyncModal(dev)}
-                    className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black rounded-xl flex items-center justify-center gap-2 transition duration-200 shadow-md shadow-emerald-500/10 cursor-pointer"
-                  >
-                    <Sliders className="w-4 h-4" />
-                    <span>مزامنة الوقت الآن</span>
-                  </button>
+                  {/* Details list */}
+                  <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-2 text-xs">
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>آخر اتصال بالخادم:</span>
+                      <span className="font-semibold text-slate-200">{formatLastPing(dev.last_ping)}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>التوقيت المتوقع حالياً:</span>
+                      <span className="font-mono font-semibold text-emerald-400 text-[11px] dir-ltr">{dev.estimated_time}</span>
+                    </div>
+
+                    {dev.pending_command ? (
+                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-amber-400 text-[11px] font-bold">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 animate-spin" />
+                          أمر تغيير الوقت معلق:
+                        </span>
+                        <span className="font-mono text-slate-200">{dev.pending_command.time}</span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="space-y-2 pt-1">
+                    {/* Sync Time Button */}
+                    <button
+                      onClick={() => handleOpenSyncModal(dev)}
+                      disabled={isExempt}
+                      className={`w-full py-2.5 text-xs font-black rounded-xl flex items-center justify-center gap-2 transition duration-200 cursor-pointer ${
+                        isExempt 
+                          ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md shadow-emerald-500/10'
+                      }`}
+                    >
+                      <Sliders className="w-4 h-4" />
+                      <span>{isExempt ? 'المزامنة معطلة (جهاز محمي)' : 'مزامنة الوقت الآن'}</span>
+                    </button>
+
+                    {/* Exemption Toggle Button */}
+                    <button
+                      onClick={() => handleToggleExemption(dev)}
+                      disabled={isToggling}
+                      className={`w-full py-2 px-3 border text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition cursor-pointer ${
+                        isExempt
+                          ? 'bg-indigo-950/40 border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/40'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      {isToggling ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : isExempt ? (
+                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                      ) : (
+                        <ShieldAlert className="w-3.5 h-3.5 text-slate-500" />
+                      )}
+                      <span>
+                        {isExempt ? 'إلغاء وضع الحماية (السماح بالمزامنة)' : 'تفعيل حماية الجهاز (استثناء من الوقت)'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -755,6 +832,26 @@ export default function DeviceTimeManager() {
                     onChange={(e) => setNewName(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-emerald-500"
                   />
+                </div>
+
+                {/* Legacy device protection checkbox */}
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newIsLegacy}
+                      onChange={(e) => setNewIsLegacy(e.target.checked)}
+                      className="mt-0.5 rounded text-indigo-500 focus:ring-0"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-200 block">
+                        جهاز قديم (تفعيل وضع الحماية واستثناء مزامنة الوقت)
+                      </span>
+                      <span className="text-[11px] text-slate-400 block leading-relaxed">
+                        اختر هذا الخيار إذا كان الجهاز قديماً (إصدار 2016 أو ما قبله) حتى لا يغير السيرفر توقيته الداخلي.
+                      </span>
+                    </div>
+                  </label>
                 </div>
 
                 <div className="flex items-center gap-3 pt-3">

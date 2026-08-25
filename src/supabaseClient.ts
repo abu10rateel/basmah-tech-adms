@@ -596,6 +596,35 @@ export const db = {
     }
   },
 
+  async toggleDeviceTimeSyncExemption(serialNumber: string, exempt: boolean): Promise<{ success: boolean; error?: any }> {
+    const user = await this.getCurrentUser();
+    if (!user) return { success: false, error: 'غير مصرح بالدخول' };
+    try {
+      const response = await fetch('/api/devices/time/exemptions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id
+        },
+        body: JSON.stringify({ serial_number: serialNumber, exempt })
+      });
+      const parsed = await safeFetchJson(response);
+      return { success: parsed.ok, error: parsed.ok ? null : parsed.data?.error };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async getTimeSyncExemptions(): Promise<string[]> {
+    try {
+      const response = await fetch('/api/devices/time/exemptions');
+      const parsed = await safeFetchJson<{ exemptions: string[] }>(response);
+      return parsed.ok && parsed.data?.exemptions ? parsed.data.exemptions : [];
+    } catch (err) {
+      return [];
+    }
+  },
+
   async getDeviceTimeStatus(): Promise<any[]> {
     const user = await this.getCurrentUser();
     if (!user) return [];

@@ -1307,6 +1307,48 @@ async function startServer() {
   // Custom middleware to handle plain/text payloads for ADMS protocol
   const rawTextParser = express.text({ type: ['text/*', 'application/octet-stream', 'application/x-www-form-urlencoded'], limit: '15mb' });
 
+  // In-memory set for Serial Numbers exempted from automatic time synchronization (Legacy devices / 2016 firmware / Custom protection)
+  const timeSyncExemptSNs = new Set<string>();
+
+  // Pre-populate from environment variables if present
+  const initialExemptEnv = (process.env.EXEMPT_TIME_SYNC_SNS || process.env.LEGACY_DEVICES_SN || '')
+    .split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean);
+  initialExemptEnv.forEach(sn => timeSyncExemptSNs.add(sn));
+
+  // Helper to determine whether a device is exempted from time synchronization
+  const isDeviceTimeSyncExempt = async (sn: string): Promise<boolean> => {
+    if (!sn) return false;
+    const cleanSn = sn.trim().toUpperCase();
+    
+    // 1. Direct in-memory lookup
+    if (timeSyncExemptSNs.has(cleanSn)) return true;
+
+    // 2. Environment variables fallback
+    const envList = (process.env.EXEMPT_TIME_SYNC_SNS || process.env.LEGACY_DEVICES_SN || '')
+      .split(',')
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+    if (envList.includes(cleanSn)) {
+      timeSyncExemptSNs.add(cleanSn);
+      return true;
+    }
+
+    // 3. Database configuration (disable_time_sync, is_legacy, exempt_time_sync)
+    try {
+      const device = await firebaseDb.getDeviceBySerialNumber(cleanSn);
+      if (device && (device.disable_time_sync === true || device.is_legacy === true || device.exempt_time_sync === true)) {
+        timeSyncExemptSNs.add(cleanSn);
+        return true;
+      }
+    } catch (err) {
+      console.warn(`[ZK ADMS] Exemption check DB warning for SN ${cleanSn}:`, err);
+    }
+
+    return false;
+  };
+
   const updateDevicePing = async (sn: string) => {
     if (!sn) return;
     try {
@@ -1376,6 +1418,26 @@ async function startServer() {
 
           // If device is polling for pending commands via GET
           if (sn) {
+            const isExempt = await isDeviceTimeSyncExempt(sn);
+
+            if (isExempt) {
+              console.log(`[ZK ADMS Protection] Device SN: ${sn} is flagged as TIME-SYNC-EXEMPT / LEGACY. All time commands are blocked to protect device internal clock.`);
+              
+              // Automatically discard and mark any pending time commands as delivered/cancelled so they never queue or reach the device
+              const pendingCmds = await firebaseDb.getPendingDeviceCommands(sn);
+              if (pendingCmds && pendingCmds.length > 0) {
+                for (const c of pendingCmds) {
+                  console.log(`[ZK ADMS Protection] Suppressed time command ${c.id} for exempt device ${sn}`);
+                  await firebaseDb.markDeviceCommandDelivered(c.id);
+                }
+              }
+
+              // Return strictly clean OK with no time commands
+              res.status(200);
+              res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+              return res.send('OK');
+            }
+
             const pendingCmds = await firebaseDb.getPendingDeviceCommands(sn);
             if (pendingCmds && pendingCmds.length > 0) {
               console.log(`[ZK ADMS] Delivering ${pendingCmds.length} pending command(s) to SN: ${sn}`);
@@ -1429,7 +1491,10 @@ async function startServer() {
         // GET request: Return standard ZKTeco ADMS handshake config options
         if (req.method === 'GET') {
           let serverTimeHeader = '';
-          if (sn) {
+          const isExempt = sn ? await isDeviceTimeSyncExempt(sn) : false;
+
+          // For exempt/legacy devices, serverTimeHeader remains STRICTLY EMPTY to prevent clock alteration
+          if (sn && !isExempt) {
             const pendingCmds = await firebaseDb.getPendingDeviceCommands(sn);
             if (pendingCmds && pendingCmds.length > 0 && pendingCmds[0].time) {
               serverTimeHeader = `ServerTime=${pendingCmds[0].time}\r\n`;
@@ -1632,13 +1697,14 @@ async function startServer() {
         return res.status(401).json({ error: 'غير مصرح بالدخول' });
       }
 
-      const { serial_number, name } = req.body;
+      const { serial_number, name, disable_time_sync, is_legacy } = req.body;
       if (!serial_number || !name) {
         return res.status(400).json({ error: { message: 'الرقم التسلسلي واسم الجهاز مطلوبين.' } });
       }
 
       const snClean = serial_number.trim().toUpperCase();
       const nameClean = name.trim();
+      const isExempt = Boolean(disable_time_sync || is_legacy);
 
       const existing = await firebaseDb.getDeviceBySerialNumber(snClean);
       if (existing) {
@@ -1646,6 +1712,8 @@ async function startServer() {
           return res.status(400).json({ error: { message: 'عذراً، هذا الرقم التسلسلي مسجل بالفعل تحت حساب مؤسسة أخرى.' } });
         }
         existing.name = nameClean;
+        existing.disable_time_sync = isExempt;
+        existing.is_legacy = isExempt;
         await firebaseDb.saveDevice(existing);
       } else {
         const newDevice = {
@@ -1653,12 +1721,20 @@ async function startServer() {
           user_id: userId,
           serial_number: snClean,
           name: nameClean,
+          disable_time_sync: isExempt,
+          is_legacy: isExempt,
           created_at: new Date().toISOString()
         };
         await firebaseDb.saveDevice(newDevice);
       }
 
-      res.json({ success: true });
+      if (isExempt) {
+        timeSyncExemptSNs.add(snClean);
+      } else {
+        timeSyncExemptSNs.delete(snClean);
+      }
+
+      res.json({ success: true, is_exempt_from_time_sync: isExempt });
     } catch (err) {
       console.error('Save device API error:', err);
       res.status(500).json({ error: 'حدث خطأ في تسجيل الجهاز.' });
@@ -1696,7 +1772,7 @@ async function startServer() {
       const allCommands = await firebaseDb.getDeviceCommands(userId);
 
       const now = new Date();
-      const enriched = tenantDevices.map((device: any) => {
+      const enriched = await Promise.all(tenantDevices.map(async (device: any) => {
         const snUpper = (device.serial_number || '').trim().toUpperCase();
         const lastPingStr = device.last_ping || device.created_at || null;
         
@@ -1706,6 +1782,8 @@ async function startServer() {
           lastPingDate = new Date(lastPingStr);
           isOnline = (now.getTime() - lastPingDate.getTime()) < (5 * 60 * 1000);
         }
+
+        const isExempt = await isDeviceTimeSyncExempt(snUpper);
 
         const pendingCmd = allCommands.find(
           (c: any) => (c.deviceSn || '').trim().toUpperCase() === snUpper && c.sent === false
@@ -1727,15 +1805,76 @@ async function startServer() {
           name: device.name,
           last_ping: lastPingStr,
           is_online: isOnline,
+          is_exempt_from_time_sync: isExempt,
+          disable_time_sync: isExempt || Boolean(device.disable_time_sync),
           pending_command: pendingCmd,
           estimated_time: currentRiyadhFormatted
         };
-      });
+      }));
 
       res.json(enriched);
     } catch (err) {
       console.error('Get devices time API error:', err);
       res.status(500).json({ error: 'حدث خطأ في جلب بيانات أوقات الأجهزة.' });
+    }
+  });
+
+  // Get list of all exempted Serial Numbers from time sync
+  app.get('/api/devices/time/exemptions', async (req, res) => {
+    try {
+      const list = Array.from(timeSyncExemptSNs);
+      res.json({ exemptions: list });
+    } catch (err) {
+      res.status(500).json({ error: 'حدث خطأ في جلب الأجهزة المستثناة.' });
+    }
+  });
+
+  // Add / Toggle time sync exemption for a device SN
+  app.post('/api/devices/time/exemptions', async (req, res) => {
+    try {
+      const { serial_number, exempt = true } = req.body;
+      if (!serial_number) {
+        return res.status(400).json({ error: 'الرقم التسلسلي مطلوب.' });
+      }
+      const snClean = serial_number.trim().toUpperCase();
+      if (exempt) {
+        timeSyncExemptSNs.add(snClean);
+      } else {
+        timeSyncExemptSNs.delete(snClean);
+      }
+
+      // Update Firestore device record if it exists
+      const dev = await firebaseDb.getDeviceBySerialNumber(snClean);
+      if (dev) {
+        dev.disable_time_sync = exempt;
+        dev.is_legacy = exempt;
+        await firebaseDb.saveDevice(dev);
+      }
+
+      console.log(`[TimeSync Exemption] Device SN ${snClean} exemption set to: ${exempt}`);
+      res.json({ success: true, serial_number: snClean, exempt });
+    } catch (err) {
+      console.error('Toggle exemption error:', err);
+      res.status(500).json({ error: 'حدث خطأ أثناء تعديل استثناء الجهاز.' });
+    }
+  });
+
+  // Delete time sync exemption for a device SN
+  app.delete('/api/devices/time/exemptions/:sn', async (req, res) => {
+    try {
+      const snClean = req.params.sn.trim().toUpperCase();
+      timeSyncExemptSNs.delete(snClean);
+
+      const dev = await firebaseDb.getDeviceBySerialNumber(snClean);
+      if (dev) {
+        dev.disable_time_sync = false;
+        dev.is_legacy = false;
+        await firebaseDb.saveDevice(dev);
+      }
+
+      res.json({ success: true, serial_number: snClean, exempt: false });
+    } catch (err) {
+      res.status(500).json({ error: 'حدث خطأ في إزالة الاستثناء.' });
     }
   });
 
@@ -1747,9 +1886,18 @@ async function startServer() {
         return res.status(401).json({ error: 'غير مصرح بالدخول' });
       }
 
-      const { deviceSn, timeType, customTime, cmdFormat } = req.body;
+      const { deviceSn, timeType, customTime, cmdFormat, force = false } = req.body;
       if (!deviceSn) {
         return res.status(400).json({ error: 'الرقم التسلسلي للجهاز مطلوب.' });
+      }
+
+      const snClean = deviceSn.trim().toUpperCase();
+      const isExempt = await isDeviceTimeSyncExempt(snClean);
+
+      if (isExempt && !force) {
+        return res.status(400).json({
+          error: `الجهاز (SN: ${snClean}) مستثنى ومحمي من مزامنة الوقت لتجنب تغيير ساعته الداخلية. إذا كنت متأكداً من رغبتك في إرسال الأمر، يرجى تعطيل وضع الاستثناء أولاً.`
+        });
       }
 
       let timeStr = '';
@@ -1767,24 +1915,24 @@ async function startServer() {
       } else {
         // Asia/Riyadh (UTC+3)
         const riyadhDateStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Riyadh' });
-        const d = new Date(riyadhDateStr);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const hh = String(d.getHours()).padStart(2, '0');
-        const min = String(d.getMinutes()).padStart(2, '0');
-        const ss = String(d.getSeconds()).padStart(2, '0');
+        const dRiyadh = new Date(riyadhDateStr);
+        const yyyy = dRiyadh.getFullYear();
+        const mm = String(dRiyadh.getMonth() + 1).padStart(2, '0');
+        const dd = String(dRiyadh.getDate()).padStart(2, '0');
+        const hh = String(dRiyadh.getHours()).padStart(2, '0');
+        const min = String(dRiyadh.getMinutes()).padStart(2, '0');
+        const ss = String(dRiyadh.getSeconds()).padStart(2, '0');
         timeStr = `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
       }
 
       const newCommand = await firebaseDb.createDeviceCommand({
-        deviceSn,
+        deviceSn: snClean,
         time: timeStr,
         command: cmdFormat || 'ALL_FORMATS',
         userId
       });
 
-      console.log(`[Device Time Sync] Created SET_TIME command for SN: ${deviceSn} with time: ${timeStr} for user: ${userId}`);
+      console.log(`[Device Time Sync] Created SET_TIME command for SN: ${snClean} with time: ${timeStr} for user: ${userId}`);
 
       res.json({ success: true, command: newCommand });
     } catch (err) {
