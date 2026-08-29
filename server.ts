@@ -1310,17 +1310,19 @@ async function startServer() {
   // In-memory set for Serial Numbers exempted from automatic time synchronization (Legacy devices / 2016 firmware / Custom protection)
   const timeSyncExemptSNs = new Set<string>();
 
-  // Configurable Time Offset in hours for incoming device punches (defaults to +5 hours)
+  // Configurable Time Offset in hours for incoming device punches
+  // When device time is 5 hours ahead, subtracting 5 hours (5 * 60 * 60 * 1000 ms) brings it back to the exact current time.
   const TIME_OFFSET_HOURS = process.env.TIME_OFFSET_HOURS !== undefined 
     ? parseFloat(process.env.TIME_OFFSET_HOURS) 
-    : 5;
+    : -5;
 
   /**
-   * Adjusts a timestamp string (YYYY-MM-DD HH:mm:ss or YYYY-MM-DD HH:mm) by adding/subtracting the configured hours offset (+5 hrs).
+   * Adjusts a timestamp string (YYYY-MM-DD HH:mm:ss or YYYY-MM-DD HH:mm) by applying an offset in hours.
+   * By default subtracts 5 hours (5 * 60 * 60 * 1000 ms) so that timestamps ahead of time are accurately rolled back to the current day and time.
    * Accurately handles days/months/years transitions and leap years using standard UTC arithmetic.
    */
   const adjustAttendanceTimestamp = (rawTimestamp: string, offsetHours: number = TIME_OFFSET_HOURS): string => {
-    if (!rawTimestamp || !offsetHours || isNaN(offsetHours)) return rawTimestamp;
+    if (!rawTimestamp || offsetHours === 0 || isNaN(offsetHours)) return rawTimestamp;
     const match = rawTimestamp.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
     if (!match) return rawTimestamp;
 
@@ -1334,7 +1336,7 @@ async function startServer() {
     const utcDate = new Date(Date.UTC(y, m - 1, d, h, min, s));
     if (isNaN(utcDate.getTime())) return rawTimestamp;
 
-    // Apply the offset in milliseconds
+    // Apply the offset in milliseconds (e.g. subtracting 5 hours = -5 * 3600 * 1000 ms)
     utcDate.setTime(utcDate.getTime() + Math.round(offsetHours * 3600 * 1000));
 
     const adjY = utcDate.getUTCFullYear();
