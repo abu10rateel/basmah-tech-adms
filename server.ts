@@ -1310,6 +1310,43 @@ async function startServer() {
   // In-memory set for Serial Numbers exempted from automatic time synchronization (Legacy devices / 2016 firmware / Custom protection)
   const timeSyncExemptSNs = new Set<string>();
 
+  // Configurable Time Offset in hours for incoming device punches (defaults to +5 hours)
+  const TIME_OFFSET_HOURS = process.env.TIME_OFFSET_HOURS !== undefined 
+    ? parseFloat(process.env.TIME_OFFSET_HOURS) 
+    : 5;
+
+  /**
+   * Adjusts a timestamp string (YYYY-MM-DD HH:mm:ss or YYYY-MM-DD HH:mm) by adding/subtracting the configured hours offset (+5 hrs).
+   * Accurately handles days/months/years transitions and leap years using standard UTC arithmetic.
+   */
+  const adjustAttendanceTimestamp = (rawTimestamp: string, offsetHours: number = TIME_OFFSET_HOURS): string => {
+    if (!rawTimestamp || !offsetHours || isNaN(offsetHours)) return rawTimestamp;
+    const match = rawTimestamp.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+    if (!match) return rawTimestamp;
+
+    const y = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const d = parseInt(match[3], 10);
+    const h = parseInt(match[4], 10);
+    const min = parseInt(match[5], 10);
+    const s = match[6] ? parseInt(match[6], 10) : 0;
+
+    const utcDate = new Date(Date.UTC(y, m - 1, d, h, min, s));
+    if (isNaN(utcDate.getTime())) return rawTimestamp;
+
+    // Apply the offset in milliseconds
+    utcDate.setTime(utcDate.getTime() + Math.round(offsetHours * 3600 * 1000));
+
+    const adjY = utcDate.getUTCFullYear();
+    const adjM = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
+    const adjD = String(utcDate.getUTCDate()).padStart(2, '0');
+    const adjH = String(utcDate.getUTCHours()).padStart(2, '0');
+    const adjMin = String(utcDate.getUTCMinutes()).padStart(2, '0');
+    const adjSec = String(utcDate.getUTCSeconds()).padStart(2, '0');
+
+    return `${adjY}-${adjM}-${adjD} ${adjH}:${adjMin}:${adjSec}`;
+  };
+
   // Pre-populate from environment variables if present
   const initialExemptEnv = (process.env.EXEMPT_TIME_SYNC_SNS || process.env.LEGACY_DEVICES_SN || '')
     .split(',')
@@ -1584,13 +1621,17 @@ async function startServer() {
             }
 
             if (pin && timestamp) {
-              const isDup = await firebaseDb.checkRawLogExists(sn || 'UNKNOWN_SN', pin, timestamp);
+              // Apply configured time offset (+5 hours) to adjust difference before saving
+              const finalTimestamp = adjustAttendanceTimestamp(timestamp, TIME_OFFSET_HOURS);
+
+              const isDup = await firebaseDb.checkRawLogExists(sn || 'UNKNOWN_SN', pin, finalTimestamp);
               if (!isDup) {
                 await firebaseDb.saveRawLog({
                   id: `zk_log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                   sn: sn || 'UNKNOWN_SN',
                   pin,
-                  timestamp,
+                  timestamp: finalTimestamp,
+                  raw_timestamp: timestamp,
                   status,
                   created_at: new Date().toISOString(),
                   synced: false
@@ -1601,7 +1642,7 @@ async function startServer() {
                 pushService.sendPunchPushNotification({
                   sn: sn || 'UNKNOWN_SN',
                   pin,
-                  timestamp,
+                  timestamp: finalTimestamp,
                   status
                 }).catch(pushErr => {
                   console.error('[ZK ADMS] Push Notification Error:', pushErr);
