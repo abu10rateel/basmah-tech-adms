@@ -1307,6 +1307,9 @@ async function startServer() {
   // Custom middleware to handle plain/text payloads for ADMS protocol
   const rawTextParser = express.text({ type: ['text/*', 'application/octet-stream', 'application/x-www-form-urlencoded'], limit: '15mb' });
 
+  // Global kill-switch for time synchronization (Enabled by default to strictly protect device internal clocks online)
+  const GLOBAL_DISABLE_TIME_SYNC = process.env.DISABLE_TIME_SYNC !== 'false' && process.env.LOCK_ALL_TIME_SYNC !== 'false';
+
   // In-memory set for Serial Numbers exempted from automatic time synchronization (Legacy devices / 2016 firmware / Custom protection)
   const timeSyncExemptSNs = new Set<string>();
 
