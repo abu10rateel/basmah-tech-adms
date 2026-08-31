@@ -12,7 +12,6 @@ import ShiftManager from './components/ShiftManager';
 import AttendanceRegister from './components/AttendanceRegister';
 import ReportingEngine from './components/ReportingEngine';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
-import DeviceTimeManager from './components/DeviceTimeManager';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PushNotificationManager, { LivePunchToast } from './components/PushNotificationManager';
 import { db } from './supabaseClient';
@@ -24,7 +23,7 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'attendance' | 'reports' | 'employees' | 'shifts' | 'deviceTime'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'reports' | 'employees' | 'shifts'>('attendance');
   const [showPushModal, setShowPushModal] = useState(false);
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
 
@@ -302,18 +301,6 @@ export default function App() {
               <span>أوقات العمل والورديات</span>
             </button>
 
-            <button
-              onClick={() => setActiveTab('deviceTime')}
-              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap flex-shrink-0 shrink-0 ${
-                activeTab === 'deviceTime'
-                  ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/50'
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 bg-slate-950/40 border border-slate-800/60'
-              }`}
-            >
-              <Clock className={`w-3.5 h-3.5 shrink-0 transition-transform ${activeTab === 'deviceTime' ? 'text-slate-950 scale-110' : 'text-emerald-400'}`} />
-              <span>إدارة وقت الأجهزة</span>
-            </button>
-
           </div>
         </nav>
       )}
@@ -367,7 +354,6 @@ export default function App() {
               {activeTab === 'reports' && <ReportingEngine />}
               {activeTab === 'employees' && <EmployeeManager />}
               {activeTab === 'shifts' && <ShiftManager />}
-              {activeTab === 'deviceTime' && <DeviceTimeManager />}
             </motion.div>
           </AnimatePresence>
         )}

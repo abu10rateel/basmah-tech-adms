@@ -1313,16 +1313,15 @@ async function startServer() {
   // In-memory set for Serial Numbers exempted from automatic time synchronization (Legacy devices / 2016 firmware / Custom protection)
   const timeSyncExemptSNs = new Set<string>();
 
-  // Configurable Time Offset in hours for incoming device punches
-  // When device time is 5 hours ahead, subtracting 5 hours (5 * 60 * 60 * 1000 ms) brings it back to the exact current time.
+  // Raw Device Time Preservation: Always take the exact timestamp sent by the biometric device
+  // No server-side alteration or distortion of device punch timestamps.
   const TIME_OFFSET_HOURS = process.env.TIME_OFFSET_HOURS !== undefined 
     ? parseFloat(process.env.TIME_OFFSET_HOURS) 
-    : -5;
+    : 0;
 
   /**
-   * Adjusts a timestamp string (YYYY-MM-DD HH:mm:ss or YYYY-MM-DD HH:mm) by applying an offset in hours.
-   * By default subtracts 5 hours (5 * 60 * 60 * 1000 ms) so that timestamps ahead of time are accurately rolled back to the current day and time.
-   * Accurately handles days/months/years transitions and leap years using standard UTC arithmetic.
+   * Returns device punch timestamp directly as recorded on the device clock.
+   * If an explicit offset is provided via TIME_OFFSET_HOURS environment variable, it applies it, otherwise keeps exact device time (offset = 0).
    */
   const adjustAttendanceTimestamp = (rawTimestamp: string, offsetHours: number = TIME_OFFSET_HOURS): string => {
     if (!rawTimestamp || offsetHours === 0 || isNaN(offsetHours)) return rawTimestamp;
@@ -1339,7 +1338,6 @@ async function startServer() {
     const utcDate = new Date(Date.UTC(y, m - 1, d, h, min, s));
     if (isNaN(utcDate.getTime())) return rawTimestamp;
 
-    // Apply the offset in milliseconds (e.g. subtracting 5 hours = -5 * 3600 * 1000 ms)
     utcDate.setTime(utcDate.getTime() + Math.round(offsetHours * 3600 * 1000));
 
     const adjY = utcDate.getUTCFullYear();
@@ -1462,69 +1460,19 @@ async function startServer() {
 
           // If device is polling for pending commands via GET
           if (sn) {
-            const isExempt = await isDeviceTimeSyncExempt(sn);
-
-            if (isExempt) {
-              console.log(`[ZK ADMS Protection] Device SN: ${sn} is flagged as TIME-SYNC-EXEMPT / LEGACY. All time commands are blocked to protect device internal clock.`);
-              
-              // Automatically discard and mark any pending time commands as delivered/cancelled so they never queue or reach the device
-              const pendingCmds = await firebaseDb.getPendingDeviceCommands(sn);
-              if (pendingCmds && pendingCmds.length > 0) {
-                for (const c of pendingCmds) {
-                  console.log(`[ZK ADMS Protection] Suppressed time command ${c.id} for exempt device ${sn}`);
-                  await firebaseDb.markDeviceCommandDelivered(c.id);
-                }
-              }
-
-              // Return strictly clean OK with no time commands
-              res.status(200);
-              res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-              return res.send('OK');
-            }
-
+            // Strict clock protection: All time commands are completely suppressed and cancelled
             const pendingCmds = await firebaseDb.getPendingDeviceCommands(sn);
             if (pendingCmds && pendingCmds.length > 0) {
-              console.log(`[ZK ADMS] Delivering ${pendingCmds.length} pending command(s) to SN: ${sn}`);
-              let commandResponseText = '';
               for (const c of pendingCmds) {
-                const cmdFormat = c.command || 'ALL_FORMATS';
-                // Calculate Unix timestamp in seconds
-                let unixSec = Math.floor(Date.now() / 1000);
-                try {
-                  const parsedDate = new Date(c.time.replace(' ', 'T'));
-                  if (!isNaN(parsedDate.getTime())) {
-                    unixSec = Math.floor(parsedDate.getTime() / 1000);
-                  }
-                } catch {
-                  // fallback
-                }
-
-                if (cmdFormat === 'ALL_FORMATS') {
-                  // Official ZKTeco Push SDK ADMS DateTime parameter variations
-                  commandResponseText += `C:${c.id}:SET OPTIONS DateTime=${c.time}\r\n`;
-                  commandResponseText += `C:${c.id}_2:SET OPTIONS DateTime=${unixSec}\r\n`;
-                  commandResponseText += `C:${c.id}_3:SET OPTION DateTime=${c.time}\r\n`;
-                  commandResponseText += `C:${c.id}_4:SET OPTIONS DT_SetTime=${c.time}\r\n`;
-                } else if (cmdFormat === 'SET_OPTIONS_DATETIME') {
-                  commandResponseText += `C:${c.id}:SET OPTIONS DateTime=${c.time}\r\n`;
-                } else if (cmdFormat === 'SET_OPTIONS_DATETIME_UNIX') {
-                  commandResponseText += `C:${c.id}:SET OPTIONS DateTime=${unixSec}\r\n`;
-                } else if (cmdFormat === 'SET_OPTION_DATETIME') {
-                  commandResponseText += `C:${c.id}:SET OPTION DateTime=${c.time}\r\n`;
-                } else if (cmdFormat === 'SET_OPTIONS_DT_SETTIME') {
-                  commandResponseText += `C:${c.id}:SET OPTIONS DT_SetTime=${c.time}\r\n`;
-                } else {
-                  commandResponseText += `C:${c.id}:SET OPTIONS DateTime=${c.time}\r\n`;
-                }
-
-                // Mark as delivered to device
+                console.log(`[ZK ADMS Clock Protection] Suppressed time command ${c.id} for device ${sn}`);
                 await firebaseDb.markDeviceCommandDelivered(c.id);
               }
-
-              res.status(200);
-              res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-              return res.send(commandResponseText);
             }
+
+            // Return strictly clean OK with no time commands
+            res.status(200);
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            return res.send('OK');
           }
 
           res.status(200);
@@ -1534,19 +1482,9 @@ async function startServer() {
 
         // GET request: Return standard ZKTeco ADMS handshake config options
         if (req.method === 'GET') {
-          let serverTimeHeader = '';
-          const isExempt = sn ? await isDeviceTimeSyncExempt(sn) : false;
-
-          // For exempt/legacy devices, serverTimeHeader remains STRICTLY EMPTY to prevent clock alteration
-          if (sn && !isExempt) {
-            const pendingCmds = await firebaseDb.getPendingDeviceCommands(sn);
-            if (pendingCmds && pendingCmds.length > 0 && pendingCmds[0].time) {
-              serverTimeHeader = `ServerTime=${pendingCmds[0].time}\r\n`;
-            }
-          }
-
-          const syncOption = isExempt ? `SyncTime=0\r\n` : '';
-
+          // Strictly disable time synchronization for all devices across all servers:
+          // SyncTime=0 tells the biometric terminal not to synchronize clock with the server.
+          // ServerTime header is permanently omitted so the device never alters its hardware clock.
           const responseConfig =
             `GET OPTION FROM: ${sn || 'device'}\r\n` +
             `Stamp=9999\r\n` +
@@ -1558,8 +1496,7 @@ async function startServer() {
             `TransFlag=1111111111\r\n` +
             `Realtime=1\r\n` +
             `Encrypt=0\r\n` +
-            syncOption +
-            serverTimeHeader +
+            `SyncTime=0\r\n` +
             `OK\r\n`;
 
           res.status(200);
