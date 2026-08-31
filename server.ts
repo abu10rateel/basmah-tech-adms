@@ -1361,6 +1361,8 @@ async function startServer() {
 
   // Helper to determine whether a device is exempted from time synchronization
   const isDeviceTimeSyncExempt = async (sn: string): Promise<boolean> => {
+    // If global disable is active, ALL devices are strictly protected from time synchronization
+    if (GLOBAL_DISABLE_TIME_SYNC) return true;
     if (!sn) return false;
     const cleanSn = sn.trim().toUpperCase();
     
@@ -1543,6 +1545,8 @@ async function startServer() {
             }
           }
 
+          const syncOption = isExempt ? `SyncTime=0\r\n` : '';
+
           const responseConfig =
             `GET OPTION FROM: ${sn || 'device'}\r\n` +
             `Stamp=9999\r\n` +
@@ -1554,6 +1558,7 @@ async function startServer() {
             `TransFlag=1111111111\r\n` +
             `Realtime=1\r\n` +
             `Encrypt=0\r\n` +
+            syncOption +
             serverTimeHeader +
             `OK\r\n`;
 
